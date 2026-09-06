@@ -56,10 +56,8 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
 }
 
 bool PacketCodec::writeExact(const uint8_t* buf, size_t len) {
-    // ====== 修复：len=0 时发送 0x00 而不是返回 true ======
     if (len == 0) {
-        uint8_t zero = 0x00;
-        return writeExact(&zero, 1);
+        return true;
     }
     
     write_timed_out_ = false;
@@ -201,8 +199,11 @@ bool PacketCodec::readString(char* out, size_t out_len) {
 }
 
 bool PacketCodec::writeString(const char* str) {
-  size_t len = strlen(str);
-  return writeVarInt((uint32_t)len) && writeExact((const uint8_t*)str, len);
+    size_t len = strlen(str);
+    if (len == 0) {
+        return writeVarInt(0);
+    }
+    return writeVarInt((uint32_t)len) && writeExact((const uint8_t*)str, len);
 }
 
 bool PacketCodec::skipString() {

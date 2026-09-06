@@ -506,10 +506,14 @@ bool MinecraftServer::handlePlay_(ClientSlot& slot, PacketCodec& codec, int32_t 
     case 0x00:
     case 0x0F:
         return codec.skipBytes((size_t)packet_len);
-    case 0x1C: // Keep Alive
+    case 0x1C: {
+    uint64_t id;
+    if (!codec.readUint64(id)) return false;
+    return true;
+}
     case 0x0B: // Chunk batch
     case 0x0D: // Client tick
-      return codec.skipBytes((size_t)packet_len);
+    return codec.skipBytes((size_t)packet_len);
 
     case 0x1E: // Set Player Position
     case 0x1F: // Set Player Position And Rotation
@@ -2326,12 +2330,11 @@ bool MinecraftServer::sendSetHeldItem_(PacketCodec& codec, uint8_t slot) {
   return codec.writeVarInt(pkt_len) && codec.writeVarInt(0x69) && codec.writeByte(slot);
 }
 
-//处理负数 window_id
+  //处理负数 window_id
 bool MinecraftServer::sendSetContainerSlot_(PacketCodec& codec, int window_id, uint16_t slot, uint8_t count, uint16_t item) {
-    // ====== 先检查 slot ======
+    // ====== 如果 slot 无效，直接返回 false ======
     if (slot >= 46) {
-        Serial.printf("[ERROR] sendSetContainerSlot_: slot=%d out of range\n", slot);
-        return true;
+        return false;
     }
     
     // 如果 count 为 0，item 必须为 0
@@ -2340,13 +2343,10 @@ bool MinecraftServer::sendSetContainerSlot_(PacketCodec& codec, int window_id, u
     }
     
     uint32_t w_id = (uint32_t)window_id;
-    
     uint32_t pkt_len = 1 + codec.sizeVarInt(w_id) + 1 + 2 + codec.sizeVarInt(count);
     if (count > 0) {
         pkt_len += codec.sizeVarInt(item) + 2;
     }
-    
-    if (pkt_len == 0) return true;
     
     if (!codec.writeVarInt(pkt_len)) return false;
     if (!codec.writeByte(0x14)) return false;
@@ -2354,13 +2354,11 @@ bool MinecraftServer::sendSetContainerSlot_(PacketCodec& codec, int window_id, u
     if (!codec.writeVarInt(0)) return false;
     if (!codec.writeUint16(slot)) return false;
     if (!codec.writeVarInt(count)) return false;
-    
     if (count > 0) {
         if (!codec.writeVarInt(item)) return false;
         if (!codec.writeVarInt(0)) return false;
         if (!codec.writeVarInt(0)) return false;
     }
-    
     return true;
 }
 
