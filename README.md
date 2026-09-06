@@ -10,11 +10,14 @@
 - 完整许可证见 LICENSE，来源和修改声明见 NOTICE。
 
 本派生项目主要修改包括：
-- 网络模式从 STA 改为纯 AP 热点模式，移除 WiFi 配网模块，开箱即用
+- 修复打开容器界面崩溃问题
+- 修复实体事件包长度错误
+- 修复空包发送导致帧长度为零
+- 修复熔炉递归栈溢出风险
 - 世界生成：每次启动生成随机世界种子
 - 游戏功能：新增下界合金装备、护甲系统、弓箭系统、无限水桶、火把放置
 - 生物 AI：新增苦力怕爆炸、骷髅射箭、僵尸群攻
-- 稳定性：增强客户端连接健壮性，修复内存泄漏和光照问题
+- 网络模式：纯AP热点模式，开箱即用
 
 ## 项目定位
 
@@ -42,14 +45,14 @@
 - 玩家登录、出生、移动、聊天
 - 基础区块生成、地形和生物群系
 - 方块放置、破坏、简单流体
-- 背包、基础合成、熔炉相关逻辑
-- 基础 Mob 刷新和部分行为
+- 背包、基础合成、熔炉逻辑
+- 基础Mob刷新和部分行为
 - 护甲系统（护甲值/韧性/减伤）
 - 弓箭射击系统
 - 无限水桶
-- AP 热点模式，开箱即用
+- AP热点模式，开箱即用
 
-当前默认配置比较小，适合先跑通和继续调试：
+当前默认配置：
 
 - 最大玩家数：`5`
 - 视距：`2`
@@ -65,40 +68,43 @@
 
 大致流程：
 
-1. 用 Visual Studio Code打开 ESP32S3-MC-main/src/ 目录
+1. 用 Visual Studio Code 打开 ESP32S3-MC-main/src/ 目录
 2. 安装 PlatformIO，并在 platformio.ini 中设置开发板型号（如 esp32-s3-devkitc-1）
 3. 编译并烧录
-4. 设备启动后会打开一个名为ESP32-MC的wifi
+4. 设备启动后会打开一个名为 ESP32-MC 的 WiFi
 5. 服务器开始监听 `25565`
-6. Minecraft Java 客户端连接到设备192.168.4.1:25565即可
+6. Minecraft Java 客户端连接到 `192.168.4.1:25565` 即可
 
 启动时串口会输出网络状态、IP 地址和启动信息，方便排查。
 
-或者直接下载[ESP32-MC Releases](https://github.com/zkd27712306/ESP32-MC/releases)，并使用烧录工具（如ESPWebTool）把程序直接烧录到你的开发板。
+或者直接下载 [ESP32-MC Releases](https://github.com/zkd27712306/ESP32-MC/releases)，并使用烧录工具（如 ESPWebTool）把程序直接烧录到你的开发板。
 
-### WiFi 配置
+### WiFi 连接
 
-当前可用的稳定方式是热点连接，相关实现见 [`ESP32S3-MC-main/src/code.ino`](ESP32S3-MC-main/src/code.ino) 。
-
-基本用法：
-
-1. 通过无线网卡进行连接，Wifi和密码都是ESP32-MC
+设备启动后会在 AP 模式下创建名为 `ESP32-MC` 的 WiFi 热点，密码为 `ESP32-MC`。
 
 ## 目录结构
 
 当前主要代码都在 `ESP32S3-MC-main/src/` 目录下：
 
-- [`ESP32S3-MC-main/src/code.ino`](ESP32S3-MC-main/src/code.ino)：Arduino 入口，初始化串口、WiFi、LED 和主循环
+- [`ESP32S3-MC-main/src/code.ino`](ESP32S3-MC-main/src/code.ino)：Arduino 入口，初始化串口、WiFi 和主循环
 - [`ESP32S3-MC-main/src/mc_server.cpp`](ESP32S3-MC-main/src/mc_server.cpp)：服务器主体，连接管理、协议状态机、主要游戏逻辑
+- [`ESP32S3-MC-main/src/mc_server.h`](ESP32S3-MC-main/src/mc_server.h)：服务器类头文件
 - [`ESP32S3-MC-main/src/packet_codec.cpp`](ESP32S3-MC-main/src/packet_codec.cpp)：Minecraft 数据包编解码
+- [`ESP32S3-MC-main/src/packet_codec.h`](ESP32S3-MC-main/src/packet_codec.h)：编解码器头文件
 - [`ESP32S3-MC-main/src/network_layer.cpp`](ESP32S3-MC-main/src/network_layer.cpp)：ESP32 网络层封装
+- [`ESP32S3-MC-main/src/network_layer.h`](ESP32S3-MC-main/src/network_layer.h)：网络层头文件
 - [`ESP32S3-MC-main/src/procedures.cpp`](ESP32S3-MC-main/src/procedures.cpp)：玩家行为、方块交互、Mob 和 Tick 相关逻辑
+- [`ESP32S3-MC-main/src/procedures.h`](ESP32S3-MC-main/src/procedures.h)：过程函数头文件
 - [`ESP32S3-MC-main/src/terrain.cpp`](ESP32S3-MC-main/src/terrain.cpp)：地形、区块和基础结构生成
+- [`ESP32S3-MC-main/src/terrain.h`](ESP32S3-MC-main/src/terrain.h)：地形生成头文件
 - [`ESP32S3-MC-main/src/crafting.cpp`](ESP32S3-MC-main/src/crafting.cpp)：合成和熔炉逻辑
+- [`ESP32S3-MC-main/src/crafting.h`](ESP32S3-MC-main/src/crafting.h)：合成头文件
 - [`ESP32S3-MC-main/src/game_state.cpp`](ESP32S3-MC-main/src/game_state.cpp)：全局游戏状态
+- [`ESP32S3-MC-main/src/game_state.h`](ESP32S3-MC-main/src/game_state.h)：游戏状态头文件
 - [`ESP32S3-MC-main/src/game_types.h`](ESP32S3-MC-main/src/game_types.h)：主要常量、开关和数据结构
 - [`ESP32S3-MC-main/src/registries.cpp`](ESP32S3-MC-main/src/registries.cpp)：协议注册表和相关大体积数据
-- [`ESP32S3-MC-main/src/wifi_config.cpp`](ESP32S3-MC-main/src/wifi_config.cpp)：WiFi 保存和串口配网逻辑（当前未使用）
+- [`ESP32S3-MC-main/src/registries.h`](ESP32S3-MC-main/src/registries.h)：注册表头文件
 
 ## 开发说明
 
