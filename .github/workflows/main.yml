@@ -65,6 +65,6 @@ jobs:
             --limit 100 \
             --json databaseId,createdAt \
             --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].databaseId' \
-          | xargs -I {} gh run delete {} --yes || true
+          | xargs -I {} gh run delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
