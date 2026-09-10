@@ -46,7 +46,7 @@ jobs:
         working-directory: ./ESP32S3-MC-main
         run: |
           ls -lh .pio/build/4d_systems_esp32s3_gen4_r8n16/
-          
+
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
@@ -59,9 +59,12 @@ jobs:
 
       - name: Delete old workflow runs
         if: always()
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 1
+        run: |
+          gh run list \
+            --workflow="ESP32-S3 云构建" \
+            --limit 100 \
+            --json databaseId,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].databaseId' \
+          | xargs -I {} gh run delete {} --yes || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
