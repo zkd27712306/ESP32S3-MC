@@ -31,18 +31,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
-      - name: Show PlatformIO version
-        run: pio --version
-
       - name: Compile firmware
         working-directory: ./ESP32S3-MC-main
         run: |
           pio run -e 4d_systems_esp32s3_gen4_r8n16
-
-      - name: List build output
-        working-directory: ./ESP32S3-MC-main
-        run: |
-          ls -lh .pio/build/4d_systems_esp32s3_gen4_r8n16/
 
       - name: Upload firmware
         uses: actions/upload-artifact@v4
@@ -50,7 +42,15 @@ jobs:
           name: esp32s3-firmware
           path: |
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/firmware.bin
-            ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/firmware.elf
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/bootloader.bin
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/partitions.bin
-          retention-days: 30
+          retention-days: 1
+          
+      - name: Delete old workflow runs
+        if: always()
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 1
