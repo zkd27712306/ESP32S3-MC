@@ -38,6 +38,15 @@
 - 插件兼容
 - 过度包装的工程结构
 
+### 云编译（GitHub Actions）
+
+本项目支持手动触发 [GitHub Actions](https://github.com/zkd27712306/ESP32S3-MC/actions) 云端编译，无需本地安装 PlatformIO。
+
+1. 打开仓库的 [Actions 页面](https://github.com/zkd27712306/ESP32S3-MC/actions)
+2. 左侧选择 **ESP32-S3 云构建**
+3. 右侧点击 **Run workflow**
+4. 编译完成后，在运行记录底部的 **Artifacts** 区域下载 `esp32s3-firmware.zip`，如https://github.com/zkd27712306/ESP32S3-MC/actions/runs/*/artifacts/*
+
 ## 当前能力
 
 现在已经有的内容包括：
