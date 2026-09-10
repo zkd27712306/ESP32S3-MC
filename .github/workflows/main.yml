@@ -1,4 +1,4 @@
-name: ESP32-S3 Cloud Build
+name: ESP32-S3 云构建
 
 on:
   workflow_dispatch:
@@ -46,7 +46,7 @@ jobs:
         working-directory: ./ESP32S3-MC-main
         run: |
           ls -lh .pio/build/4d_systems_esp32s3_gen4_r8n16/
-
+          
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
@@ -56,6 +56,7 @@ jobs:
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/bootloader.bin
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/partitions.bin
           retention-days: 30
+
       - name: Delete old workflow runs
         if: always()
         uses: Mattraks/delete-workflow-runs@v2
