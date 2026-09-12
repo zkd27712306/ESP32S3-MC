@@ -15,9 +15,6 @@ int g_slot_fd_map[MAX_PLAYERS] = {-1, -1, -1, -1, -1};
 uint8_t getBlockChange(int16_t x, uint8_t y, int16_t z) {
   for (int i = 0; i < block_changes_count; i++) {
     if (block_changes[i].block == 0xFF) continue;
-#ifdef bundle
-    if (block_changes[i].block == B_chest) { i += 14; continue; }
-#endif
     if (block_changes[i].x == x && block_changes[i].y == y && block_changes[i].z == z)
       return block_changes[i].block;
   }
@@ -28,10 +25,19 @@ uint8_t makeBlockChange(int16_t x, uint8_t y, int16_t z, uint8_t block) {
   // 先查找已有改动
   for (int i = 0; i < block_changes_count; i++) {
     if (block_changes[i].block == 0xFF) continue;
-#ifdef ALLOW_CHESTS
-    if (block_changes[i].block == B_chest) { i += 14; continue; }
-#endif
     if (block_changes[i].x == x && block_changes[i].y == y && block_changes[i].z == z) {
+#ifdef ALLOW_CHESTS
+      // ★ 原来这个位置是箱子，且现在要改成非箱子 → 释放 chest_data
+      if (block_changes[i].block == B_chest && block != B_chest) {
+        for (int c = 0; c < MAX_CHESTS; c++) {
+          if (chest_data[c].used && chest_data[c].x == x &&
+              chest_data[c].y == y && chest_data[c].z == z) {
+            chest_data[c].used = false;
+            break;
+          }
+        }
+      }
+#endif
       block_changes[i].block = block;
       return 0;
     }
@@ -46,19 +52,22 @@ uint8_t makeBlockChange(int16_t x, uint8_t y, int16_t z, uint8_t block) {
     if (i >= block_changes_count) block_changes_count = i + 1;
 #ifdef ALLOW_CHESTS
     if (block == B_chest) {
-      // chest 后面预留 14 个槽位存储数据，标记为 0xFF 防止被当作普通改动处理
-      for (int j = 1; j <= 14; j++) {
-        if (i + j < MAX_BLOCK_CHANGES) {
-          memset(&block_changes[i + j], 0, sizeof(BlockChange));
-          block_changes[i + j].block = 0xFF;
-        }
+      // ★ 在独立数组中初始化箱子
+      for (int c = 0; c < MAX_CHESTS; c++) {
+        if (chest_data[c].used) continue;
+        chest_data[c].used = true;
+        chest_data[c].x = x;
+        chest_data[c].y = y;
+        chest_data[c].z = z;
+        memset(chest_data[c].items, 0, sizeof(chest_data[c].items));
+        memset(chest_data[c].counts, 0, sizeof(chest_data[c].counts));
+        break;
       }
-      if (i + 14 >= block_changes_count) block_changes_count = i + 15;
     }
 #endif
     return 0;
   }
-  return 1; // 满了
+  return 1;
 }
 
 // ============ 方块属性 ============
@@ -110,7 +119,6 @@ uint8_t isInstantlyMined(PlayerData *player, uint8_t block) {
 }
 
 uint32_t isCompostItem(uint16_t item) {
-  // 返回堆肥概率 (0 = 不可堆肥, 其他值越大概率越高)
   switch (item) {
     case I_oak_leaves: case I_oak_sapling: case I_short_grass:
       return 0x40000000;
@@ -120,8 +128,6 @@ uint32_t isCompostItem(uint16_t item) {
 
 uint8_t getItemStackSize(uint16_t item) {
   (void)item;
-  // 大部分物品堆叠 64, 工具/武器/护甲堆叠 1
-  // 简化处理
   return 64;
 }
 
@@ -158,7 +164,6 @@ uint16_t getMiningResult(uint16_t held_item, uint8_t block) {
     case B_gravel: return (fast_rand() & 15) == 0 ? I_flint : 0;
     default: break;
   }
-  // 方块到物品映射
   if (block < 256 && B_to_I[block] != 0) return B_to_I[block];
   return 0;
 }
@@ -166,7 +171,6 @@ uint16_t getMiningResult(uint16_t held_item, uint8_t block) {
 void bumpToolDurability(PlayerData *player) {
   uint16_t *item = &player->inventory_items[player->hotbar];
   uint8_t *count = &player->inventory_count[player->hotbar];
-  // 简化: 工具不消耗耐久
   (void)item; (void)count;
 }
 
@@ -184,6 +188,8 @@ void resetPlayerData(PlayerData *player) {
   for (int i = 0; i < 41; i++) { player->inventory_items[i] = 0; player->inventory_count[i] = 0; }
   for (int i = 0; i < 9; i++) { player->craft_items[i] = 0; player->craft_count[i] = 0; }
   player->flags &= ~0x80;
+  player->chest_flags = 0;
+  for (int i = 0; i < 27; i++) { player->chest_items[i] = 0; player->chest_count[i] = 0; }
 
   // 出生装备
   player->inventory_items[0] = I_stone_sword;    player->inventory_count[0] = 1;
@@ -192,7 +198,7 @@ void resetPlayerData(PlayerData *player) {
   player->inventory_items[3] = I_stone_shovel;   player->inventory_count[3] = 1;
   player->inventory_items[4] = I_stone_hoe;      player->inventory_count[4] = 1;
   player->inventory_items[5] = I_oak_log;        player->inventory_count[5] = 64;
-  player->inventory_items[6] = I_cooked_porkchop;          player->inventory_count[6] = 64;
+  player->inventory_items[6] = I_cooked_porkchop; player->inventory_count[6] = 64;
   player->inventory_items[7] = I_torch; player->inventory_count[7] = 64;
 }
 
@@ -257,22 +263,22 @@ int givePlayerItem(PlayerData *player, uint16_t item, uint8_t count) {
   uint8_t slot = 255;
   uint8_t stack_size = getItemStackSize(item);
 
-  for (int i = 0; i < 41; i++) {
+  // ★ 只在 0-35 找堆叠（排除护甲 36-39 和副手 40）
+  for (int i = 0; i < 36; i++) {
     if (player->inventory_items[i] == item && player->inventory_count[i] <= stack_size - count) {
       slot = i; break;
     }
   }
   if (slot == 255) {
-    for (int i = 0; i < 41; i++) {
+    for (int i = 0; i < 36; i++) {
       if (player->inventory_count[i] == 0) { slot = i; break; }
     }
   }
-  if (slot >= 36) return 1;
+  if (slot == 255) return 1;   // 背包满
 
   player->inventory_items[slot] = item;
   player->inventory_count[slot] += count;
 
-  // 通过回调同步给客户端
   if (g_sync_slot_cb && player->client_fd >= 0)
     g_sync_slot_cb(player->client_fd, slot, player->inventory_count[slot], player->inventory_items[slot]);
 
@@ -289,9 +295,10 @@ uint8_t serverSlotToClientSlot(int window_id, uint8_t slot) {
     if (slot >= 36 && slot <= 39) return 44 - slot;
     if (slot >= 41 && slot <= 44) return slot - 40;
   } else if (window_id == 2) {
-    if (slot >= 50 && slot <= 76) return slot - 50;
-    if (slot >= 9 && slot <= 35) return slot + 18;
-    if (slot <= 8) return slot + 54;
+    // ★ 箱子
+    if (slot >= 50 && slot <= 76) return slot - 50;   // 箱子 → 0-26
+    if (slot >= 9 && slot <= 35) return slot + 18;    // 背包 → 27-53
+    if (slot <= 8) return slot + 54;                  // 快捷栏 → 54-62
   } else if (window_id == 12) {
     if (slot >= 41 && slot <= 49) return slot - 40;
     return serverSlotToClientSlot(0, slot - 1);
@@ -321,8 +328,10 @@ uint8_t clientSlotToServerSlot(int window_id, uint8_t slot) {
   }
 #ifdef ALLOW_CHESTS
   if (window_id == 2) {
-    if (slot <= 26) return 41 + slot;
-    if (slot >= 27 && slot <= 62) return clientSlotToServerSlot(0, slot - 18);
+    // ★ 与 serverSlotToClientSlot 对称
+    if (slot <= 26) return 50 + slot;               // 箱子 → 50-76
+    if (slot >= 27 && slot <= 53) return slot - 18; // 背包 → 9-35
+    if (slot >= 54 && slot <= 62) return slot - 54; // 快捷栏 → 0-8
   }
 #endif
   return 255;
@@ -445,10 +454,10 @@ uint8_t calculateTotalArmor(PlayerData* player) {
 uint8_t applyArmorReduction(PlayerData* player, uint8_t damage) {
     uint8_t armor = calculateTotalArmor(player);
     if (armor == 0) return damage;
-    
+
     float reduction = armor * 0.04f;
     if (reduction > 0.8f) reduction = 0.8f;
-    
+
     uint8_t toughness = 0;
     for (int i = 36; i < 40; i++) {
         toughness += getArmorToughness(player->inventory_items[i]);
@@ -458,7 +467,7 @@ uint8_t applyArmorReduction(PlayerData* player, uint8_t damage) {
         reduction = reduction * toughness_factor;
         if (reduction > 0.8f) reduction = 0.8f;
     }
-    
+
     uint8_t reduced = (uint8_t)(damage * (1.0f - reduction));
     return reduced > 0 ? reduced : 1;
 }
