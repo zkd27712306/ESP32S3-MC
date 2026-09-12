@@ -65,13 +65,6 @@
 
 // ============ 数据结构 ============
 
-struct BlockChange {
-  int16_t x;
-  int16_t z;
-  uint8_t y;
-  uint8_t block;
-};
-
 #pragma pack(push, 1)
 
 struct BlockChange {
@@ -143,20 +136,6 @@ struct EntityData {
   uint8_t index;
   int type;
   EntityDataValue value;
-};
-
-struct ChunkAnchor {
-  int16_t x;
-  int16_t z;
-  uint32_t hash;
-  uint8_t biome;
-};
-
-struct ChunkFeature {
-  int16_t x;
-  uint8_t y;
-  int16_t z;
-  uint8_t variant;
 };
 
 // ============ 世界生成结构 ============
