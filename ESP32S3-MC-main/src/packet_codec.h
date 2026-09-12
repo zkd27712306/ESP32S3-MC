@@ -39,6 +39,9 @@ class PacketCodec {
   void resetWriteCount() { write_count_ = 0; }
   size_t writeCount() const { return write_count_; }
 
+  void resetReadCount() { read_count_ = 0; }
+  size_t readCount() const { return read_count_; }
+
   void setWriteTimeout(uint32_t ms) { write_timeout_ms_ = ms; }
   bool writeTimedOut() const { return write_timed_out_; }
 
@@ -50,6 +53,7 @@ class PacketCodec {
   uint32_t write_timeout_ms_ = 5000;
   bool write_timed_out_ = false;
   size_t write_count_ = 0;
+  size_t read_count_ = 0;
   uint32_t packet_error_count_ = 0;
 };
 
