@@ -1,6 +1,6 @@
 # ESP32MC Server
 
-English version:[here](https://github.com/zkd27712306/ESP32S3-MC/blob/main/English.md)
+![version](https://img.shields.io/badge/version-1.0-blue) English version:[here](https://github.com/zkd27712306/ESP32S3-MC/blob/main/English.md)
 
 > 一块 ESP32-S3，就是一个 Minecraft Java 服务器。
 
