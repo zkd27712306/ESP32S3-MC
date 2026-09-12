@@ -288,6 +288,10 @@ uint8_t serverSlotToClientSlot(int window_id, uint8_t slot) {
     if (slot == 40) return 45;
     if (slot >= 36 && slot <= 39) return 44 - slot;
     if (slot >= 41 && slot <= 44) return slot - 40;
+  } else if (window_id == 2) {
+    if (slot >= 50 && slot <= 76) return slot - 50;
+    if (slot >= 9 && slot <= 35) return slot + 18;
+    if (slot <= 8) return slot + 54;
   } else if (window_id == 12) {
     if (slot >= 41 && slot <= 49) return slot - 40;
     return serverSlotToClientSlot(0, slot - 1);
