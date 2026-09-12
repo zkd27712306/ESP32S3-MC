@@ -34,6 +34,11 @@ class PacketCodec {
   bool skipString();
   bool skipBytes(size_t len);
 
+  // ====== 包级封装 ======
+  bool beginPacket(uint32_t packet_id);
+  bool endPacket();
+  void abortPacket();
+
   int fd() const { return fd_; }
 
   void resetWriteCount() { write_count_ = 0; }
