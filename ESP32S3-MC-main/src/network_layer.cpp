@@ -1,4 +1,4 @@
-#ifndef _WIN32  // Windows 版使用 win_network_layer.cpp, 此文件仅 ESP32 编译
+#ifndef _WIN32
 
 #include "network_layer.h"
 
@@ -16,28 +16,52 @@ bool NetworkLayer::begin(const char* ssid, const char* password, uint32_t connec
   next_retry_at_ms_ = 0;
   ip_announced_ = false;
 
-  // ====== 如果是 AP 模式（SSID 为空），直接启动服务器 ======
+  // AP 模式
   if (ssid_ == nullptr || ssid_[0] == '\0') {
     Serial.println("AP mode: Starting server directly");
     startServer_();
     return true;
   }
 
-  // ====== 否则连接 WiFi ======
+  // STA 模式
+  Serial.println("STA mode: Starting server first, then connecting WiFi");
+  startServer_();
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+
   Serial.print("Connecting to WiFi: ");
   Serial.println(ssid_);
 
-  if (!connectWiFi_(connect_timeout_ms)) {
-    Serial.println("WiFi connect failed");
-    return false;
+  WiFi.begin(ssid_, password_ != nullptr ? password_ : "");
+
+  uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - start >= connect_timeout_ms) {
+      Serial.println("WiFi connect timeout, will retry in background");
+      next_retry_at_ms_ = millis() + 5000;
+      break;
+    }
+    if (WiFi.status() == WL_CONNECT_FAILED) {
+      Serial.println("WiFi connect failed (wrong password?)");
+      next_retry_at_ms_ = millis() + 10000;
+      break;
+    }
+    delay(250);
   }
 
-  startServer_();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("WiFi connected! IP: ");
+    Serial.println(WiFi.localIP());
+    ip_announced_ = true;
+  }
+
   return true;
 }
 
 void NetworkLayer::poll() {
-  // AP 模式下不需要处理 WiFi 重连
+  // ====== AP 模式 ======
   if (ssid_ == nullptr || ssid_[0] == '\0') {
     if (!server_started_) {
       startServer_();
@@ -45,6 +69,9 @@ void NetworkLayer::poll() {
     return;
   }
 
+  // ====== STA 模式 ======
+  
+  // 已连接
   if (WiFi.status() == WL_CONNECTED) {
     if (!server_started_) {
       startServer_();
@@ -57,26 +84,36 @@ void NetworkLayer::poll() {
     return;
   }
 
-  if (ssid_ == nullptr || ssid_[0] == '\0') {
+  // 排除"正在连接"的状态
+  wl_status_t status = WiFi.status();
+  if (status == WL_IDLE_STATUS || status == WL_SCAN_COMPLETED) {
     return;
   }
 
+  // 记录断开
   if (ip_announced_) {
-    Serial.println("WiFi disconnected, reconnecting...");
+    Serial.printf("WiFi disconnected (status=%d), reconnecting...\n", status);
     ip_announced_ = false;
   }
 
+  // 重连延时
   uint32_t now = millis();
   if (next_retry_at_ms_ != 0 && (int32_t)(now - next_retry_at_ms_) < 0) {
     return;
   }
 
+  // 重连前先断开，清理 WiFi 栈状态
+  if (status == WL_CONNECT_FAILED || status == WL_CONNECTION_LOST) {
+    WiFi.disconnect(true);
+    delay(100);
+  }
+
   next_retry_at_ms_ = now + 5000;
+  Serial.printf("[WiFi] Reconnecting to %s\n", ssid_);
   WiFi.begin(ssid_, password_ != nullptr ? password_ : "");
 }
 
 bool NetworkLayer::connected() const {
-  // AP 模式下始终返回 true
   if (ssid_ == nullptr || ssid_[0] == '\0') {
     return true;
   }
@@ -84,7 +121,6 @@ bool NetworkLayer::connected() const {
 }
 
 WiFiClient NetworkLayer::accept() {
-  // AP 模式下直接接受连接
   if (ssid_ == nullptr || ssid_[0] == '\0') {
     if (!server_started_) {
       startServer_();
@@ -104,26 +140,8 @@ WiFiClient NetworkLayer::accept() {
 }
 
 bool NetworkLayer::connectWiFi_(uint32_t connect_timeout_ms) {
-  if (ssid_ == nullptr || ssid_[0] == '\0') {
-    return false;
-  }
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid_, password_ != nullptr ? password_ : "");
-
-  uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - start >= connect_timeout_ms) {
-      Serial.println("WiFi connect timeout");
-      return false;
-    }
-    delay(250);
-  }
-
-  ip_announced_ = true;
-  Serial.print("WiFi connected, IP: ");
-  Serial.println(WiFi.localIP());
-  return true;
+  // 保留兼容性，实际逻辑已移到 begin()
+  return WiFi.status() == WL_CONNECTED;
 }
 
 void NetworkLayer::startServer_() {
@@ -138,4 +156,4 @@ void NetworkLayer::startServer_() {
   Serial.println("Server listening on port 25565");
 }
 
-#endif // !_WIN32
+#endif
