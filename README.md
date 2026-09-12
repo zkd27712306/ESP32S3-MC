@@ -127,16 +127,9 @@
 | `boot_app0.bin` | `0xe000` |
 | `firmware.bin` | `0x10000` |
 
-5. 波特率建议选择 `921600`（更快），如果失败改成 `115200`
-6. 点击 **Program** 开始烧录
-7. 等待进度条走完，显示 **Done** 即烧录成功
-8. 按一下 ESP32-S3 板上的 **RST / EN** 键，或重新上电
-
-> 💡 **如果 [ESPWebTool](https://esptool.spacehuhn.com/) 连不上开发板，检查**：
-> - 浏览器是否为 Chrome / Edge（Firefox、Safari 不支持 Web Serial）
-> - USB 线是否是数据线（不是纯充电线）
-> - 驱动是否安装（CH340 / CP2102 / ESP32-S3 内置 USB）
-> - 是否按住了 BOOT 键再点 Connect
+5. 点击 **Program** 开始烧录
+6. 等待进度条走完，显示 **Done** 即烧录成功
+7. 按一下 ESP32-S3 板上的 **RST / EN** 键，或重新上电
 
 ---
 
