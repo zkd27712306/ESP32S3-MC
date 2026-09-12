@@ -197,7 +197,7 @@ void MinecraftServer::poll() {
                 clients_[i].chunk_queue_idx = -1;
             }
         }
-        heap_caps_check_integrity_all(true);
+        //heap_caps_check_integrity_all(true);
         vTaskDelay(50);
         return;
     }
@@ -367,11 +367,13 @@ void MinecraftServer::closeClient_(uint8_t slot_index, int cause) {
 
     if (slot.player_index >= 0) handlePlayerDisconnect_(slot_index);
 
-#ifdef _WIN32
-    if (slot.fd >= 0) {
-        closesocket((SOCKET)slot.fd);
-        slot.fd = -1;
+#ifndef _WIN32
+    if (kept_clients[slot_index]) {
+        kept_clients[slot_index].flush();
+        kept_clients[slot_index].stop();
+        kept_clients[slot_index] = WiFiClient();
     }
+    slot.fd = -1;
 #else
     // ====== 彻底释放 WiFiClient ======
     if (kept_clients[slot_index]) {
