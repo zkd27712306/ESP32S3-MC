@@ -790,10 +790,29 @@ case 0x09: { // Chat
       sendSystemChat_(pc, "!help - Show this help", strlen("!help - Show this help"));
       sendSystemChat_(pc, "!msg <p> <msg> - Whisper", strlen("!msg <p> <msg> - Whisper"));
       sendSystemChat_(pc, "!summon <mob> [n] - Spawn", strlen("!summon <mob> [n] - Spawn"));
-      sendSystemChat_(pc, "!give <p> <item> [count]", strlen("!give <p> <item> [count]"));
+      sendSystemChat_(pc, "!give <p> <item> [count] - see !items", strlen("!give <p> <item> [count] - see !items"));
       sendSystemChat_(pc, "!overworld - Back to spawn", strlen("!overworld - Back to spawn"));
       sendSystemChat_(pc, "Mobs: chicken cow pig sheep zombie skeleton spider creeper", strlen("Mobs: chicken cow pig sheep zombie skeleton spider creeper"));
     }
+
+    // ====== !items ======
+else if (strcmp(msg, "!items") == 0) {
+    auto send = [&](const char* s) { sendSystemChat_(pc, s, (uint16_t)strlen(s)); };
+    
+    send("=== Items (1/3) ===");
+    send("Blocks: stone dirt cobblestone sand gravel clay glass oak_log oak_planks");
+    send("Ores: coal redstone copper_ingot iron_ingot gold_ingot diamond lapis_lazuli emerald raw_iron raw_gold raw_copper");
+    send("Blocks+: diamond_block iron_block gold_block coal_block redstone_block copper_block crafting_table furnace chest");
+    
+    send("=== Items (2/3) ===");
+    send("Tools: iron_sword iron_pickaxe iron_axe iron_shovel diamond_sword diamond_pickaxe");
+    send("Armor: leather_helmet leather_chestplate iron_helmet iron_chestplate diamond_helmet diamond_chestplate");
+    
+    send("=== Items (3/3) ===");
+    send("Combat: arrow flint feather string bow shield");
+    send("Food: apple bread cooked_beef cooked_porkchop cooked_chicken wheat carrot potato");
+    send("Misc: stick torch leather bucket water_bucket");
+}
     
     // ====== !overworld ======
     else if (strncmp(msg, "!overworld", 10) == 0) {
@@ -954,6 +973,46 @@ case 0x09: { // Chat
       else if (strcmp(item_name, "coal_block")==0)      item_id = I_coal_block;
       else if (strcmp(item_name, "redstone_block")==0)  item_id = I_redstone_block;
       else if (strcmp(item_name, "copper_block")==0)    item_id = I_copper_block;
+      // ====== 弓箭相关 ======
+      else if (strcmp(item_name, "arrow") == 0)         item_id = I_arrow;
+      else if (strcmp(item_name, "flint") == 0)         item_id = I_flint;
+      else if (strcmp(item_name, "feather") == 0)       item_id = I_feather;
+      else if (strcmp(item_name, "string") == 0)        item_id = I_string;
+      else if (strcmp(item_name, "bow") == 0)           item_id = I_bow;
+      else if (strcmp(item_name, "stick") == 0)         item_id = I_stick;
+      else if (strcmp(item_name, "sand") == 0)          item_id = I_sand;
+      else if (strcmp(item_name, "gravel") == 0)        item_id = I_gravel;
+      else if (strcmp(item_name, "clay") == 0)          item_id = I_clay;
+      else if (strcmp(item_name, "glass") == 0)         item_id = I_glass;
+      else if (strcmp(item_name, "leather") == 0)       item_id = I_leather;
+      else if (strcmp(item_name, "raw_iron") == 0)      item_id = I_raw_iron;
+      else if (strcmp(item_name, "raw_gold") == 0)      item_id = I_raw_gold;
+      else if (strcmp(item_name, "raw_copper") == 0)    item_id = I_raw_copper;
+      else if (strcmp(item_name, "lapis_lazuli") == 0)  item_id = I_lapis_lazuli;
+      else if (strcmp(item_name, "emerald") == 0)       item_id = I_emerald;
+      else if (strcmp(item_name, "apple") == 0)         item_id = I_apple;
+      else if (strcmp(item_name, "bread") == 0)         item_id = I_bread;
+      else if (strcmp(item_name, "wheat") == 0)         item_id = I_wheat;
+      else if (strcmp(item_name, "carrot") == 0)        item_id = I_carrot;
+      else if (strcmp(item_name, "potato") == 0)        item_id = I_potato;
+      else if (strcmp(item_name, "iron_sword") == 0)    item_id = I_iron_sword;
+      else if (strcmp(item_name, "iron_pickaxe") == 0)  item_id = I_iron_pickaxe;
+      else if (strcmp(item_name, "iron_axe") == 0)      item_id = I_iron_axe;
+      else if (strcmp(item_name, "iron_shovel") == 0)   item_id = I_iron_shovel;
+      else if (strcmp(item_name, "diamond_sword") == 0) item_id = I_diamond_sword;
+      else if (strcmp(item_name, "diamond_pickaxe") == 0) item_id = I_diamond_pickaxe;
+      else if (strcmp(item_name, "leather_helmet") == 0)     item_id = I_leather_helmet;
+      else if (strcmp(item_name, "leather_chestplate") == 0) item_id = I_leather_chestplate;
+      else if (strcmp(item_name, "iron_helmet") == 0)        item_id = I_iron_helmet;
+      else if (strcmp(item_name, "iron_chestplate") == 0)    item_id = I_iron_chestplate;
+      else if (strcmp(item_name, "diamond_helmet") == 0)     item_id = I_diamond_helmet;
+      else if (strcmp(item_name, "diamond_chestplate") == 0) item_id = I_diamond_chestplate;
+      else if (strcmp(item_name, "water_bucket") == 0)  item_id = I_water_bucket;
+      else if (strcmp(item_name, "shield") == 0)        item_id = I_shield;
+      else if (strcmp(item_name, "crafting_table") == 0) item_id = I_crafting_table;
+      else if (strcmp(item_name, "furnace") == 0)       item_id = I_furnace;
+      else if (strcmp(item_name, "chest") == 0)         item_id = I_chest;
+      else if (strcmp(item_name, "torch") == 0)         item_id = I_torch;
       
       if (item_id == 0) {
         sendSystemChat_(pc, "Unknown item. Try: stone, dirt, cobblestone, oak_log, iron_ingot, diamond, etc.", strlen("Unknown item. Try: stone, dirt, cobblestone, oak_log, iron_ingot, diamond, etc."));
