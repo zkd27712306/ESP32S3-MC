@@ -74,10 +74,17 @@ struct BlockChange {
 
 #pragma pack(push, 1)
 
+struct BlockChange {
+  int16_t x;
+  int16_t z;
+  uint8_t y;
+  uint8_t block;
+};
+
 struct PlayerData {
   uint8_t uuid[16];
   char name[16];
-  int client_fd;  // 在新架构中用作 slot index
+  int client_fd;
   int16_t x;
   uint8_t y;
   int16_t z;
@@ -99,14 +106,6 @@ struct PlayerData {
   uint8_t craft_count[9];
   uint16_t flagval_16;
   uint8_t flagval_8;
-  // 0x01 - 攻击冷却
-  // 0x02 - 新玩家待生成
-  // 0x04 - 潜行
-  // 0x08 - 疾跑
-  // 0x10 - 吃东西
-  // 0x20 - 客户端加载中
-  // 0x40 - 移动更新冷却
-  // 0x80 - craft_items 已锁
   uint8_t flags;
   int16_t  chest_x;
   uint8_t  chest_y;
@@ -121,11 +120,19 @@ struct MobData {
   int16_t x;
   uint8_t y;
   int16_t z;
-  // 低 5 位: 血量, 中间 1 位: 羊剃毛, 高 2 位: 惊慌计时器
   uint8_t data;
 };
 
 #pragma pack(pop)
+
+struct ChestData {
+  bool     used;
+  int16_t  x;
+  uint8_t  y;
+  int16_t  z;
+  uint16_t items[27];
+  uint8_t  counts[27];
+};
 
 union EntityDataValue {
   uint8_t byte_val;
@@ -134,8 +141,22 @@ union EntityDataValue {
 
 struct EntityData {
   uint8_t index;
-  int type;  // 0 - Byte, 21 - Pose
+  int type;
   EntityDataValue value;
+};
+
+struct ChunkAnchor {
+  int16_t x;
+  int16_t z;
+  uint32_t hash;
+  uint8_t biome;
+};
+
+struct ChunkFeature {
+  int16_t x;
+  uint8_t y;
+  int16_t z;
+  uint8_t variant;
 };
 
 // ============ 世界生成结构 ============
