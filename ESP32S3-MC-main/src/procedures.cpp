@@ -155,6 +155,7 @@ uint16_t getMiningResult(uint16_t held_item, uint8_t block) {
     case B_oak_sapling: return I_oak_sapling;
     case B_torch: return I_torch;
     case B_oak_wood: return I_oak_wood;
+    case B_gravel: return (fast_rand() & 15) == 0 ? I_flint : 0;
     default: break;
   }
   // 方块到物品映射
