@@ -334,37 +334,51 @@ void MinecraftServer::serviceClient_(uint8_t slot_index) {
   }
 
   PacketCodec codec(slot.fd);
-  int32_t packet_len = 0, packet_id = 0;
-  if (!codec.readVarInt(packet_len) || !codec.readVarInt(packet_id)) {
+  codec.resetReadCount();
+
+  // ====== 读包长 ======
+  int32_t packet_len = 0;
+  if (!codec.readVarInt(packet_len)) {
     uint8_t dummy[256];
     while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
     return;
   }
 
-  // ====== 检查包长度 ======
+  // ====== 包长非法：不断开，丢弃后继续 ======
   if (packet_len <= 0 || packet_len > 65536) {
-    Serial.printf("[PKT_ERR] slot=%u bad packet_len=%d, closing\n",
+    slot.packet_err_count++;
+    Serial.printf("[PKT_ERR] slot=%u bad packet_len=%d, draining\n",
                   (unsigned)slot_index, (int)packet_len);
-    closeClient_(slot_index, 9);
+    uint8_t dummy[256];
+    while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
+    return;
+  }
+
+  // ====== 读包 ID ======
+  int32_t packet_id = 0;
+  if (!codec.readVarInt(packet_id)) {
+    uint8_t dummy[256];
+    while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
     return;
   }
 
   int32_t payload_len = packet_len - codec.sizeVarInt((uint32_t)packet_id);
   if (payload_len < 0 || payload_len > 65536) {
+    slot.packet_err_count++;
     Serial.printf("[PKT_ERR] slot=%u payload_len=%d pkt_len=%d id=%d\n",
                   (unsigned)slot_index, (int)payload_len, (int)packet_len, (int)packet_id);
-    closeClient_(slot_index, 10);
+    uint8_t dummy[256];
+    while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
     return;
   }
 
+  // ====== 特殊包跳过 ======
+  if (packet_id == 0x1D) {
+    if (payload_len > 0) codec.skipBytes((size_t)payload_len);
+    return;
+  }
 
-if (packet_id == 0x1D) {
-        if (payload_len > 0) {
-            codec.skipBytes((size_t)payload_len);
-        }
-        return;
-    }
-
+  // ====== 处理包 ======
   bool ok = false;
   switch (slot.state) {
     case STATE_NONE: ok = handleHandshake_(slot, codec, packet_id); break;
@@ -375,11 +389,17 @@ if (packet_id == 0x1D) {
     default: ok = false; break;
   }
 
+  // ====== 兜底：保证 payload 读完（不断开） ======
+  size_t consumed = codec.readCount()
+                  - codec.sizeVarInt((uint32_t)packet_len)
+                  - codec.sizeVarInt((uint32_t)packet_id);
+  if (consumed < (size_t)payload_len) {
+    size_t remaining = (size_t)payload_len - consumed;
+    codec.skipBytes(remaining);
+  }
+
   if (!ok) {
-    if (!codec.skipBytes((size_t)payload_len)) {
-      uint8_t dummy[256];
-      while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
-    }
+    slot.packet_err_count++;
   }
 }
 
@@ -1140,7 +1160,7 @@ case 0x2A: { // Player Command
     }
 
     default:
-      return true;
+      return codec.skipBytes((size_t)packet_len);
   }
 }
 
