@@ -59,7 +59,12 @@ bool PacketCodec::writeExact(const uint8_t* buf, size_t len) {
     if (len == 0) {
         return true;
     }
-    
+    if (buf == nullptr) {
+        packet_error_count_++;
+        write_timed_out_ = true;
+        return false;
+    }
+
     write_timed_out_ = false;
     write_count_ += len;
     size_t done = 0;
@@ -173,9 +178,18 @@ bool PacketCodec::writeVarInt(uint32_t value) {
         if (value) byte |= 0x80;
         out[len++] = byte;
     } while (value);
-    
+
     if (len == 0) return true;
     return writeExact(out, len);
+}
+
+bool PacketCodec::writePacketLength(uint32_t value) {
+    if (value == 0) {
+        packet_error_count_++;
+        write_timed_out_ = true;
+        return false;
+    }
+    return writeVarInt(value);
 }
 
 int PacketCodec::sizeVarInt(uint32_t value) const {
