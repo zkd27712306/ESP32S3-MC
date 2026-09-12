@@ -1078,11 +1078,9 @@ else if (strcmp(msg, "!items") == 0) {
       return handleClickContainer_(slot_idx, codec, packet_len);
     }
 
-        case 0x13: { // Close Container
+                case 0x13: { // Close Container
     if (!player) return codec.skipBytes((size_t)packet_len);
     int32_t window_id; codec.readVarInt(window_id);
-
-    // 写回存储
     if (window_id == 2 && (player->chest_flags & 0x01)) {
         ChestData* chest = nullptr;
         for (int c = 0; c < MAX_CHESTS; c++) {
@@ -1111,6 +1109,37 @@ else if (strcmp(msg, "!items") == 0) {
         return true;
     }
 
+    for (uint8_t i = 0; i < 9; i++) {
+        uint16_t craft_item = player->craft_items[i];
+        if (craft_item != I_water_bucket && craft_item != I_bucket &&
+            craft_item != I_lava_bucket && craft_item != I_milk_bucket) {
+            if (craft_item != 0 && player->craft_count[i] > 0) {
+                givePlayerItem(player, craft_item, player->craft_count[i]);
+            }
+        }
+        player->craft_items[i] = 0;
+        player->craft_count[i] = 0;
+    }
+    player->flags &= ~0x80;
+
+    if (player->flagval_16 != 0 && player->flagval_8 > 0) {
+        givePlayerItem(player, player->flagval_16, player->flagval_8);
+    }
+    player->flagval_16 = 0;
+    player->flagval_8 = 0;
+
+    {
+        PacketCodec pc(slot.fd);
+        sendSetContainerSlot_(pc, 0, 0, 0, 0);
+        for (uint8_t i = 1; i <= 4; i++)
+            sendSetContainerSlot_(pc, 0, i, 0, 0);
+        for (uint8_t i = 0; i < 41; i++)
+            sendSetContainerSlot_(pc, 0, serverSlotToClientSlot(0, i),
+                player->inventory_count[i], player->inventory_items[i]);
+    }
+    return true;
+    }
+    
     case 0x0C: { // Client Status (respawn)
       if (!player) return codec.skipBytes((size_t)packet_len);
       uint8_t action_id; if (!codec.readByte(action_id)) return false;
@@ -1123,6 +1152,7 @@ else if (strcmp(msg, "!items") == 0) {
       return true;
     }
 
+case 0x2A: { // Player Command
 case 0x2A: { // Player Command
     if (!player) return codec.skipBytes((size_t)packet_len);
     int32_t eid; codec.readVarInt(eid);
