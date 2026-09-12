@@ -93,20 +93,6 @@ void getCraftingOutput(PlayerData *player, uint8_t *count, uint16_t *item) {
                 if (first_item == I_gold_ingot) { *item = I_golden_sword; *count = 1; return; }
                 if (first_item == I_diamond) { *item = I_diamond_sword; *count = 1; return; }
             }
-            // ====== 弓 ======
-    if (player->craft_items[0] == 0 &&
-        player->craft_items[1] == I_stick &&
-        player->craft_items[2] == I_string &&
-        player->craft_items[3] == I_stick &&
-        player->craft_items[4] == 0 &&
-        player->craft_items[5] == I_string &&
-        player->craft_items[6] == 0 &&
-        player->craft_items[7] == I_stick &&
-        player->craft_items[8] == I_string) {
-        *item = I_bow;
-        *count = 1;
-        return;
-    }
             // 箭
             if (first_item == I_flint && first_col == 0 && first_row == 0 &&
                 player->craft_items[first + 1] == I_stick && player->craft_items[first + 2] == I_feather) {
@@ -215,10 +201,22 @@ void getCraftingOutput(PlayerData *player, uint8_t *count, uint16_t *item) {
             }
             break;
 
-        // ====== 6个物品（原 case 6 保留给其他配方） ======
+        // ====== 6个物品 ======
         case 6:
-            // 这里可以放其他6个物品的配方
-            break;
+    if (player->craft_items[0] == 0 &&
+        player->craft_items[1] == I_stick &&
+        player->craft_items[2] == I_string &&
+        player->craft_items[3] == I_stick &&
+        player->craft_items[4] == 0 &&
+        player->craft_items[5] == I_string &&
+        player->craft_items[6] == 0 &&
+        player->craft_items[7] == I_stick &&
+        player->craft_items[8] == I_string) {
+        *item = I_bow;
+        *count = 1;
+        return;
+    }
+    break;
 
         // ====== 7个物品（护腿 + 盾牌） ======
         case 7:
