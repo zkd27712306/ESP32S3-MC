@@ -1078,9 +1078,45 @@ else if (strcmp(msg, "!items") == 0) {
       return handleClickContainer_(slot_idx, codec, packet_len);
     }
 
-    case 0x13: { // Close Container
+        case 0x13: { // Close Container
     if (!player) return codec.skipBytes((size_t)packet_len);
     int32_t window_id; codec.readVarInt(window_id);
+
+    // 写回存储
+    if (window_id == 2 && (player->chest_flags & 0x01)) {
+        uint8_t *storage_ptr = nullptr;
+        for (int i = 0; i < block_changes_count; i++) {
+            if (block_changes[i].block != B_chest) continue;
+            if (block_changes[i].x != player->chest_x) continue;
+            if (block_changes[i].y != player->chest_y) continue;
+            if (block_changes[i].z != player->chest_z) continue;
+            storage_ptr = (uint8_t *)(&block_changes[i + 1]);
+            break;
+        }
+        if (storage_ptr != nullptr) {
+            for (int i = 0; i < 27; i++) {
+                uint16_t ci = player->chest_items[i];
+                uint8_t  cc = player->chest_count[i];
+                if (cc == 0) ci = 0;
+                memcpy(storage_ptr + i * 3,     &ci, 2);
+                memcpy(storage_ptr + i * 3 + 2, &cc, 1);
+            }
+        }
+        player->chest_flags &= ~0x01;
+        for (int i = 0; i < 27; i++) {
+            player->chest_items[i] = 0;
+            player->chest_count[i] = 0;
+        }
+        player->flags &= ~0x80;
+        // 同步背包给客户端
+        PacketCodec pc(slot.fd);
+        for (uint8_t i = 0; i < 41; i++)
+            sendSetContainerSlot_(pc, 0, serverSlotToClientSlot(0, i),
+                player->inventory_count[i], player->inventory_items[i]);
+        return true;
+    }
+
+    // 原来的合成格清空逻辑
     for (uint8_t i = 0; i < 9; i++) {
         if (window_id != 2) {
             uint16_t craft_item = player->craft_items[i];
@@ -1537,14 +1573,29 @@ if (*item == I_torch) {
                 break;
             }
             if (storage_ptr == nullptr) return;
-            memcpy(player->craft_items, &storage_ptr, sizeof(storage_ptr));
-            player->flags |= 0x80;
-            sendOpenScreen_(pc, 2, "Chest", 5);
+
+            // 保存箱子坐标
+            player->chest_x = x;
+            player->chest_y = (uint8_t)y;
+            player->chest_z = z;
+
+            // 从箱子存储读入 27 格
             for (int i = 0; i < 27; i++) {
-                uint16_t ci; uint8_t cc;
+                uint16_t ci = 0;
+                uint8_t  cc = 0;
                 memcpy(&ci, storage_ptr + i * 3, 2);
                 memcpy(&cc, storage_ptr + i * 3 + 2, 1);
-                sendSetContainerSlot_(pc, 2, i, cc, ci);
+                if (cc == 0) ci = 0;
+                player->chest_items[i] = ci;
+                player->chest_count[i] = cc;
+            }
+
+            player->chest_flags |= 0x01;
+            player->flags |= 0x80;   // 锁定合成输出
+
+            sendOpenScreen_(pc, 2, "Chest", 5);
+            for (int i = 0; i < 27; i++) {
+                sendSetContainerSlot_(pc, 2, i, player->chest_count[i], player->chest_items[i]);
             }
             return;
         }
@@ -1799,7 +1850,7 @@ bool MinecraftServer::handleClickContainer_(uint8_t slot_idx, PacketCodec& codec
         uint16_t change_slot; codec.readUint16(change_slot);
         uint8_t s = clientSlotToServerSlot(window_id, (uint8_t)change_slot);
 
-        uint16_t *p_item = nullptr;
+                uint16_t *p_item = nullptr;
         uint8_t *p_count = nullptr;
         if (s < 41) {
             p_item = &player->inventory_items[s];
@@ -1808,6 +1859,12 @@ bool MinecraftServer::handleClickContainer_(uint8_t slot_idx, PacketCodec& codec
             p_item = &player->craft_items[s - 41];
             p_count = &player->craft_count[s - 41];
         }
+#ifdef ALLOW_CHESTS
+        else if (s >= 50 && s <= 76 && window_id == 2 && (player->chest_flags & 0x01)) {
+            p_item = &player->chest_items[s - 50];
+            p_count = &player->chest_count[s - 50];
+        }
+#endif
 
         uint8_t has_item; codec.readByte(has_item);
         if (!has_item) {
