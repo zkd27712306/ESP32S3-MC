@@ -66,13 +66,12 @@ void getCraftingOutput(PlayerData *player, uint8_t *count, uint16_t *item) {
         case 3:
             // 台阶
             if ((first_item == I_oak_planks || first_item == I_cobblestone ||
-                 first_item == I_stone || first_item == I_snow_block) &&
+                 first_item == I_stone) &&
                 first_col == 0 && player->craft_items[first + 1] == first_item &&
                 player->craft_items[first + 2] == first_item) {
                 if (first_item == I_oak_planks) *item = I_oak_slab;
                 else if (first_item == I_cobblestone) *item = I_cobblestone_slab;
                 else if (first_item == I_stone) *item = I_stone_slab;
-                else if (first_item == I_snow_block) *item = I_snow;
                 *count = 6;
                 return;
             }
@@ -94,14 +93,20 @@ void getCraftingOutput(PlayerData *player, uint8_t *count, uint16_t *item) {
                 if (first_item == I_gold_ingot) { *item = I_golden_sword; *count = 1; return; }
                 if (first_item == I_diamond) { *item = I_diamond_sword; *count = 1; return; }
             }
-            // 弓
-            if (first_item == I_string && first_row == 0 && first_col == 0 &&
-                player->craft_items[first + 1] == I_string && player->craft_items[first + 2] == I_string &&
-                player->craft_items[first + 4] == I_stick && player->craft_items[first + 7] == I_stick) {
-                *item = I_bow;
-                *count = 1;
-                return;
-            }
+            // ====== 弓 ======
+    if (player->craft_items[0] == 0 &&
+        player->craft_items[1] == I_stick &&
+        player->craft_items[2] == I_string &&
+        player->craft_items[3] == I_stick &&
+        player->craft_items[4] == 0 &&
+        player->craft_items[5] == I_string &&
+        player->craft_items[6] == 0 &&
+        player->craft_items[7] == I_stick &&
+        player->craft_items[8] == I_string) {
+        *item = I_bow;
+        *count = 1;
+        return;
+    }
             // 箭
             if (first_item == I_flint && first_col == 0 && first_row == 0 &&
                 player->craft_items[first + 1] == I_stick && player->craft_items[first + 2] == I_feather) {
@@ -145,21 +150,6 @@ void getCraftingOutput(PlayerData *player, uint8_t *count, uint16_t *item) {
                 }
                 if (first_item == I_snowball) {
                     *item = I_snow_block;
-                    *count = 3;
-                    return;
-                }
-                if (first_item == I_iron_ingot) {
-                    *item = I_iron_block;
-                    *count = 1;
-                    return;
-                }
-                if (first_item == I_gold_ingot) {
-                    *item = I_gold_block;
-                    *count = 1;
-                    return;
-                }
-                if (first_item == I_diamond) {
-                    *item = I_diamond_block;
                     *count = 1;
                     return;
                 }
