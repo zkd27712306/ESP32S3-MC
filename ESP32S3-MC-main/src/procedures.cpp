@@ -27,7 +27,7 @@ uint8_t makeBlockChange(int16_t x, uint8_t y, int16_t z, uint8_t block) {
     if (block_changes[i].block == 0xFF) continue;
     if (block_changes[i].x == x && block_changes[i].y == y && block_changes[i].z == z) {
 #ifdef ALLOW_CHESTS
-      // ★ 原来这个位置是箱子，且现在要改成非箱子 → 释放 chest_data
+      // 原来这个位置是箱子，且现在要改成非箱子 → 释放 chest_data
       if (block_changes[i].block == B_chest && block != B_chest) {
         for (int c = 0; c < MAX_CHESTS; c++) {
           if (chest_data[c].used && chest_data[c].x == x &&
@@ -35,6 +35,19 @@ uint8_t makeBlockChange(int16_t x, uint8_t y, int16_t z, uint8_t block) {
             chest_data[c].used = false;
             break;
           }
+        }
+      }
+      // 原来不是箱子，现在要放箱子 → 初始化 chest_data
+      if (block_changes[i].block != B_chest && block == B_chest) {
+        for (int c = 0; c < MAX_CHESTS; c++) {
+          if (chest_data[c].used) continue;
+          chest_data[c].used = true;
+          chest_data[c].x = x;
+          chest_data[c].y = y;
+          chest_data[c].z = z;
+          memset(chest_data[c].items, 0, sizeof(chest_data[c].items));
+          memset(chest_data[c].counts, 0, sizeof(chest_data[c].counts));
+          break;
         }
       }
 #endif
@@ -52,7 +65,6 @@ uint8_t makeBlockChange(int16_t x, uint8_t y, int16_t z, uint8_t block) {
     if (i >= block_changes_count) block_changes_count = i + 1;
 #ifdef ALLOW_CHESTS
     if (block == B_chest) {
-      // ★ 在独立数组中初始化箱子
       for (int c = 0; c < MAX_CHESTS; c++) {
         if (chest_data[c].used) continue;
         chest_data[c].used = true;
