@@ -811,7 +811,7 @@ else if (strcmp(msg, "!items") == 0) {
     send("=== Items (3/3) ===");
     send("Combat: arrow flint feather string bow shield");
     send("Food: apple bread cooked_beef cooked_porkchop cooked_chicken wheat carrot potato");
-    send("Misc: stick torch leather bucket water_bucket");
+    send("Misc: stick torch leather water_bucket");
 }
     
     // ====== !overworld ======
