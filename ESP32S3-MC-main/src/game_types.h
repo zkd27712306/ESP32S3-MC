@@ -107,6 +107,12 @@ struct PlayerData {
   // 0x40 - 移动更新冷却
   // 0x80 - craft_items 已锁
   uint8_t flags;
+  int16_t  chest_x;
+  uint8_t  chest_y;
+  int16_t  chest_z;
+  uint16_t chest_items[27];
+  uint8_t  chest_count[27];
+  uint8_t  chest_flags;
 };
 
 struct MobData {
