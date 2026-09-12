@@ -27,7 +27,7 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
     if (fd_ < 0) return false;
 #ifdef _WIN32
     int n = recv((SOCKET)fd_, (char*)(buf + done), (int)(len - done), 0);
-    if (n > 0) { done += (size_t)n; start = millis(); continue; }
+    if (n > 0) { done += (size_t)n; read_count_ += (size_t)n; start = millis(); continue; }
     if (n == 0) return false;
     int err = WSAGetLastError();
     if (err == WSAEWOULDBLOCK || err == WSAEINTR) {
@@ -39,6 +39,7 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
     int n = recv(fd_, buf + done, len - done, 0);
     if (n > 0) {
       done += (size_t)n;
+      read_count_ += (size_t)n;
       start = millis();
       if (g_packet_activity_cb) g_packet_activity_cb();
       continue;
