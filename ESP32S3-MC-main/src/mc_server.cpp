@@ -677,53 +677,49 @@ if (on_ground && packet_id != 0x20) {
     sendAcknowledgeBlockChange_(pc, sequence);
     
     // ====== 检查是否手持弓 ======
-    uint16_t held = player->inventory_items[player->hotbar];
-    if (held == I_bow && player->inventory_count[player->hotbar] > 0) {
-        uint8_t arrow_slot = 255;
-        for (uint8_t i = 0; i < 41; i++) {
-            if (player->inventory_items[i] == I_arrow && player->inventory_count[i] > 0) {
-                arrow_slot = i; break;
-            }
-        }
-        if (arrow_slot != 255) {
-            player->inventory_count[arrow_slot]--;
-            if (player->inventory_count[arrow_slot] == 0) player->inventory_items[arrow_slot] = 0;
-            sendSetContainerSlot_(pc, 0, serverSlotToClientSlot(0, arrow_slot), 
-                player->inventory_count[arrow_slot], player->inventory_items[arrow_slot]);
-            
-            int target_entity = -1;
-            float angle = player->yaw * 180.0f / 127.0f;
-            float rad = angle * 3.14159f / 180.0f;
-            int dx_dir = (int)(sin(rad) * 2);
-            int dz_dir = (int)(cos(rad) * 2);
-            
-            for (int d = 1; d < 30; d++) {
-                int16_t tx = player->x + d * dx_dir;
-                int16_t tz = player->z + d * dz_dir;
-                for (int i = 0; i < MAX_MOBS; i++) {
-                    if (mob_data[i].type == 0) continue;
-                    if ((mob_data[i].data & 31) == 0) continue;
-                    int16_t dx = mob_data[i].x - tx;
-                    int16_t dz = mob_data[i].z - tz;
-                    if (dx*dx + dz*dz < 3) {
-                        target_entity = -2 - i;
-                        break;
-                    }
-                }
-                if (target_entity != -1) break;
-            }
-            
-            if (target_entity != -1) {
-                hurtEntity_(target_entity, slot_idx, D_arrow, 8);
-                for (uint8_t i = 0; i < kMaxClients; i++) {
-                    if (!clients_[i].used || clients_[i].state != STATE_PLAY) continue;
-                    PacketCodec oc(clients_[i].fd);
-                    sendEntityEvent_(oc, target_entity, 2);
-                }
-            }
-            return true;
+uint16_t held = player->inventory_items[player->hotbar];
+if (held == I_bow && player->inventory_count[player->hotbar] > 0) {
+    uint8_t arrow_slot = 255;
+    for (uint8_t i = 0; i < 41; i++) {
+        if (player->inventory_items[i] == I_arrow && player->inventory_count[i] > 0) {
+            arrow_slot = i; break;
         }
     }
+    if (arrow_slot != 255) {
+        // 消耗一根箭
+        player->inventory_count[arrow_slot]--;
+        if (player->inventory_count[arrow_slot] == 0) player->inventory_items[arrow_slot] = 0;
+        sendSetContainerSlot_(pc, 0, serverSlotToClientSlot(0, arrow_slot),
+            player->inventory_count[arrow_slot], player->inventory_items[arrow_slot]);
+
+        // ====== 找最近的 mob ======
+        int target_entity = -1;
+        uint32_t closest_dist = 0xFFFFFFFF;
+        for (int i = 0; i < MAX_MOBS; i++) {
+            if (mob_data[i].type == 0) continue;
+            if ((mob_data[i].data & 31) == 0) continue;
+            int16_t dx = mob_data[i].x - player->x;
+            int16_t dz = mob_data[i].z - player->z;
+            int16_t dy = (int16_t)mob_data[i].y - (int16_t)player->y;
+            uint32_t dist = (uint32_t)(dx*dx + dz*dz + dy*dy);
+            if (dist < closest_dist) {
+                closest_dist = dist;
+                target_entity = -2 - i;
+            }
+        }
+
+        // ====== 造成 2 点伤害 ======
+        if (target_entity != -1 && closest_dist < 30 * 30) {
+            hurtEntity_(target_entity, slot_idx, D_arrow, 2);
+            for (uint8_t i = 0; i < kMaxClients; i++) {
+                if (!clients_[i].used || clients_[i].state != STATE_PLAY) continue;
+                PacketCodec oc(clients_[i].fd);
+                sendEntityEvent_(oc, target_entity, 2);
+            }
+        }
+        return true;
+    }
+}
     
     // ====== 水桶倒水 ======
 if (held == I_water_bucket) {
