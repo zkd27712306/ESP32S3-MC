@@ -11,6 +11,7 @@ extern uint16_t client_count;
 
 extern BlockChange block_changes[];
 extern int block_changes_count;
+extern ChestData chest_data[MAX_CHESTS];
 
 extern PlayerData player_data[];
 extern int player_data_count;
