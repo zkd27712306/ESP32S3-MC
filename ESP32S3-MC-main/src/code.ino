@@ -18,8 +18,8 @@ static bool server_started = false;
 // ============================================================
 // WiFi 配置（请修改为你的路由器信息）
 // ============================================================
-static const char* WIFI_SSID     = "zzhengkaidong";
-static const char* WIFI_PASSWORD = "zzkd27712306zkd";
+static const char* WIFI_SSID     = "zhengkaidong";
+static const char* WIFI_PASSWORD = "zkd27712306zkd";
 
 static const char *resetReasonString(esp_reset_reason_t reason) {
     switch (reason) {
