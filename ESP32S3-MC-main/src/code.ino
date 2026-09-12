@@ -33,20 +33,31 @@ static const char* HTML_PAGE = R"(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ESP32-MC Setup</title>
 <style>
-body{font-family:sans-serif;max-width:400px;margin:40px auto;padding:20px}
-h1{color:#333}
-input{width:100%;padding:10px;margin:8px 0;box-sizing:border-box;font-size:16px}
-button{width:100%;padding:12px;background:#4CAF50;color:white;border:none;font-size:16px;cursor:pointer}
+body{font-family:sans-serif;max-width:400px;margin:40px auto;padding:20px;background:#f5f5f5}
+h1{color:#333;margin-bottom:5px}
+p.sub{color:#888;margin-top:0;font-size:14px}
+form{background:white;padding:20px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+label{display:block;margin-top:12px;font-weight:bold;color:#555}
+input{width:100%;padding:10px;margin:6px 0;box-sizing:border-box;font-size:16px;border:1px solid #ccc;border-radius:4px}
+button{width:100%;padding:12px;background:#4CAF50;color:white;border:none;font-size:16px;cursor:pointer;border-radius:4px;margin-top:16px}
 button:hover{background:#45a049}
+.radio-group{margin-top:12px}
+.radio-group label{display:block;font-weight:normal;margin:6px 0;cursor:pointer}
+.radio-group input{width:auto;margin-right:8px}
 </style>
 </head>
 <body>
-<h1>ESP32-MC WiFi Setup</h1>
+<h1>ESP32-MC Setup</h1>
+<p class="sub">Configure WiFi and server mode</p>
 <form action="/save" method="POST">
 <label>WiFi Name (SSID)</label>
-<input type="text" name="ssid" required maxlength="32">
+<input type="text" name="ssid" required maxlength="32" placeholder="Your WiFi name">
 <label>WiFi Password</label>
-<input type="password" name="pass" maxlength="64">
+<input type="password" name="pass" maxlength="64" placeholder="Your WiFi password">
+<div class="radio-group">
+<label><input type="radio" name="mode" value="sta" checked> STA - Connect to your WiFi</label>
+<label><input type="radio" name="mode" value="ap"> AP - Create ESP32-MC hotspot</label>
+</div>
 <button type="submit">Save & Reboot</button>
 </form>
 </body>
@@ -78,11 +89,12 @@ static void loadConfig() {
     prefs.end();
 }
 
-static void saveWifi(const String& ssid, const String& pass) {
+static void saveConfig(const String& ssid, const String& pass, bool ap) {
     prefs.begin("esp32mc", false);
     prefs.putString("ssid", ssid);
     prefs.putString("pass", pass);
-    prefs.putBool("ap_mode", false);
+    prefs.putBool("ap_mode", ap);
+    prefs.putBool("configured", true);
     prefs.end();
 }
 
@@ -92,11 +104,16 @@ static void saveApMode(bool ap) {
     prefs.end();
 }
 
-static void clearWifi() {
+static bool isConfigured() {
+    prefs.begin("esp32mc", true);
+    bool c = prefs.getBool("configured", false);
+    prefs.end();
+    return c;
+}
+
+static void clearConfig() {
     prefs.begin("esp32mc", false);
-    prefs.remove("ssid");
-    prefs.remove("pass");
-    prefs.putBool("ap_mode", false);
+    prefs.clear();
     prefs.end();
 }
 
@@ -107,17 +124,26 @@ static void handleRoot() {
 static void handleSave() {
     String ssid = webServer.arg("ssid");
     String pass = webServer.arg("pass");
-    if (ssid.length() == 0) {
-        webServer.send(400, "text/plain", "SSID required");
+    String mode = webServer.arg("mode");
+
+    if (ssid.length() == 0 && mode != "ap") {
+        webServer.send(400, "text/plain", "SSID required for STA mode");
         return;
     }
-    saveWifi(ssid, pass);
-    String html = "<!DOCTYPE html><html><body style='font-family:sans-serif;max-width:400px;margin:40px auto;padding:20px'>";
-    html += "<h1>Saved</h1><p>WiFi: " + ssid + "</p>";
-    html += "<p>ESP32 will reboot and connect to this WiFi.</p>";
+
+    bool ap = (mode == "ap");
+    saveConfig(ssid, pass, ap);
+
+    String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Saved</title>";
+    html += "<style>body{font-family:sans-serif;max-width:400px;margin:40px auto;padding:20px}</style></head><body>";
+    html += "<h1>Saved</h1>";
+    html += "<p>Mode: " + String(ap ? "AP" : "STA") + "</p>";
+    if (!ap) html += "<p>WiFi: " + ssid + "</p>";
+    html += "<p>ESP32 will reboot in 2 seconds...</p>";
     html += "</body></html>";
     webServer.send(200, "text/html", html);
-    delay(1000);
+
+    delay(2000);
     ESP.restart();
 }
 
@@ -126,6 +152,7 @@ static void startSetupAP() {
     WiFi.setSleep(false);
     WiFi.softAP(SETUP_SSID, SETUP_PASS);
     IPAddress ip = WiFi.softAPIP();
+
     Serial.println("========================================");
     Serial.println("  WiFi Setup Mode");
     Serial.println("========================================");
@@ -135,6 +162,7 @@ static void startSetupAP() {
     Serial.println(SETUP_PASS);
     Serial.print("  URL:  http://");
     Serial.println(ip);
+    Serial.println("  Long-press BOOT 10s to reset");
     Serial.println("========================================");
 
     webServer.on("/", handleRoot);
@@ -151,7 +179,6 @@ static bool isBootPressed() {
 static void checkBootButton() {
     static uint32_t press_start = 0;
     static bool pressed = false;
-    static bool short_triggered = false;
 
     bool current = (digitalRead(BOOT_BUTTON_PIN) == LOW);
 
@@ -159,7 +186,6 @@ static void checkBootButton() {
         delay(DEBOUNCE_MS);
         if (digitalRead(BOOT_BUTTON_PIN) == LOW) {
             pressed = true;
-            short_triggered = false;
             press_start = millis();
             Serial.println("[BOOT] Pressed");
         }
@@ -167,22 +193,17 @@ static void checkBootButton() {
         uint32_t held = millis() - press_start;
 
         if (held >= LONG_PRESS_MS) {
-            Serial.println("[BOOT] 10s -> clear WiFi, entering setup mode");
-            clearWifi();
+            Serial.println("[BOOT] 10s -> clear config, entering setup mode");
+            clearConfig();
             delay(100);
             ESP.restart();
-        }
-
-        if (held >= SHORT_PRESS_MS && !short_triggered) {
-            short_triggered = true;
-            Serial.println("[BOOT] 2s reached, switch on release");
         }
     } else if (!current && pressed) {
         uint32_t held = millis() - press_start;
         pressed = false;
 
         if (held >= SHORT_PRESS_MS && held < LONG_PRESS_MS) {
-            Serial.println("[BOOT] 2s release -> switching mode");
+            Serial.println("[BOOT] 2s release -> toggle AP/STA");
             saveApMode(!use_ap_mode);
             delay(100);
             ESP.restart();
@@ -208,14 +229,10 @@ void setup() {
 
     loadConfig();
 
-    if (wifi_ssid.length() == 0 && !use_ap_mode) {
-        Serial.println("[MODE] No WiFi -> setup mode");
+    if (!isConfigured()) {
+        Serial.println("[MODE] Not configured -> setup mode");
         startSetupAP();
         return;
-    }
-
-    if (wifi_ssid.length() == 0 && use_ap_mode) {
-        Serial.println("[MODE] No WiFi, AP mode");
     }
 
     uint32_t seed = esp_random();
@@ -263,7 +280,7 @@ void setup() {
         Serial.printf("  WiFi: %s\n", wifi_ssid.c_str());
     }
     Serial.println("  BOOT 2s  -> switch AP/STA");
-    Serial.println("  BOOT 10s -> clear WiFi, setup mode");
+    Serial.println("  BOOT 10s -> reset config");
     Serial.println("========================================");
 }
 
