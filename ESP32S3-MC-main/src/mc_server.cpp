@@ -2515,13 +2515,14 @@ bool MinecraftServer::sendPlayerInfoUpdateAddPlayer_(PacketCodec& codec, PlayerD
 }
 
 bool MinecraftServer::sendSpawnEntity_(PacketCodec& codec, int id, uint8_t* uuid, int type, double x, double y, double z, uint8_t yaw, uint8_t pitch) {
-  uint32_t pkt_len = 45 + codec.sizeVarInt((uint32_t)id) + codec.sizeVarInt((uint32_t)type) + codec.sizeVarInt(0);
+  uint32_t pkt_len = 51 + codec.sizeVarInt((uint32_t)id) + codec.sizeVarInt((uint32_t)type);
   if (!codec.writePacketLength(pkt_len)) return false;
   return codec.writeByte(0x01) &&
          codec.writeVarInt((uint32_t)id) && codec.writeExact(uuid, 16) && codec.writeVarInt((uint32_t)type) &&
          codec.writeDouble(x) && codec.writeDouble(y) && codec.writeDouble(z) &&
          codec.writeByte(0) && codec.writeByte(pitch) && codec.writeByte(yaw) && codec.writeByte(yaw) &&
-         codec.writeVarInt(0);
+         codec.writeVarInt(0) &&
+         codec.writeUint16(0) && codec.writeUint16(0) && codec.writeUint16(0);
 }
 
 bool MinecraftServer::sendEntityAnimation_(PacketCodec& codec, int id, uint8_t animation) {
@@ -2531,12 +2532,12 @@ bool MinecraftServer::sendEntityAnimation_(PacketCodec& codec, int id, uint8_t a
 }
 
 bool MinecraftServer::sendTeleportEntity_(PacketCodec& codec, int id, double x, double y, double z, float yaw, float pitch) {
-  uint32_t pkt_len = 62 + codec.sizeVarInt((uint32_t)id);
+  uint32_t pkt_len = 61 + codec.sizeVarInt((uint32_t)id);
   if (!codec.writePacketLength(pkt_len)) return false;
   return codec.writeByte(0x7D) && codec.writeVarInt((uint32_t)id) &&
          codec.writeDouble(x) && codec.writeDouble(y) && codec.writeDouble(z) &&
          codec.writeUint64(0) && codec.writeUint64(0) && codec.writeUint64(0) &&
-         codec.writeFloat(yaw) && codec.writeFloat(pitch) && codec.writeByte(1) && codec.writeUint32(0);
+         codec.writeFloat(yaw) && codec.writeFloat(pitch) && codec.writeUint32(0);
 }
 
 bool MinecraftServer::sendSetHeadRotation_(PacketCodec& codec, int id, uint8_t yaw) {
