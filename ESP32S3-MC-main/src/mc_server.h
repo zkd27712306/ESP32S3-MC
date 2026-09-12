@@ -20,9 +20,8 @@ class MinecraftServer {
   void poll();
 
  private:
-  // ============ 客户端槽位 ============
   struct ClientSlot {
-    int fd;              // socket fd, -1 表示未使用
+    int fd;
     uint8_t state;
     bool used;
     bool config_received_info;
@@ -30,37 +29,32 @@ class MinecraftServer {
     uint8_t uuid[16];
     char name[16];
     int player_index;
-    // 延迟发块队列
     int8_t chunk_queue_idx;
     int16_t chunk_center_x;
     int16_t chunk_center_z;
     uint32_t chunk_next_send_ms;
-    // 移动边缘区块队列
     int8_t edge_queue_count;
     int8_t edge_queue_idx;
     int16_t edge_chunks_x[50];
     int16_t edge_chunks_z[50];
-    // 自适应区块发送速率
-    uint16_t chunk_interval_ms;   // 当前发块间隔 (ms), 10~500
-    uint32_t chunk_send_start_ms; // 上次发块开始时间, 用于测量耗时
-    uint8_t  chunk_slow_count;    // 连续超时次数, 用于退避
+    uint16_t chunk_interval_ms;
+    uint32_t chunk_send_start_ms;
+    uint8_t  chunk_slow_count;
+    uint32_t packet_err_count;
   };
 
   static const uint8_t kMaxClients = MAX_PLAYERS;
 
-  // ============ 连接管理 ============
   bool acceptClient_();
   void serviceClient_(uint8_t slot_index);
   void closeClient_(uint8_t slot_index, int cause);
 
-  // ============ 协议状态处理 ============
   bool handleHandshake_(ClientSlot& slot, PacketCodec& codec, int32_t packet_id);
   bool handleStatus_(ClientSlot& slot, PacketCodec& codec, int32_t packet_id, int32_t packet_len);
   bool handleLogin_(ClientSlot& slot, PacketCodec& codec, int32_t packet_id, int32_t packet_len);
   bool handleConfiguration_(ClientSlot& slot, PacketCodec& codec, int32_t packet_id, int32_t packet_len);
   bool handlePlay_(ClientSlot& slot, PacketCodec& codec, int32_t packet_id, int32_t packet_len);
 
-  // ============ 发包: 状态/登录/配置 ============
   bool sendStatusResponse_(PacketCodec& codec);
   bool sendLoginSuccess_(PacketCodec& codec, const uint8_t uuid[16], const char* name);
   bool sendBrand_(PacketCodec& codec);
@@ -70,7 +64,6 @@ class MinecraftServer {
   bool sendRegistries_(PacketCodec& codec);
   bool sendFinishConfiguration_(PacketCodec& codec);
 
-  // ============ 发包: Play ============
   bool sendLoginPlay_(PacketCodec& codec, uint32_t entity_id);
   bool sendSynchronizePlayerPosition_(PacketCodec& codec, double x, double y, double z, float yaw, float pitch);
   bool sendSetDefaultSpawnPosition_(PacketCodec& codec, int64_t x, int64_t y, int64_t z, float yaw, float pitch);
@@ -97,13 +90,11 @@ class MinecraftServer {
   bool sendRespawn_(PacketCodec& codec);
   bool sendPlayerAbilities_(PacketCodec& codec, uint8_t flags);
 
-  // ============ 收包处理 ============
   bool consumeClientInformation_(PacketCodec& codec);
   bool consumePluginMessage_(PacketCodec& codec, int32_t payload_len);
   bool consumeKnownPacks_(PacketCodec& codec);
   bool skipRemainingPacket_(PacketCodec& codec, int32_t packet_len, int32_t packet_id);
 
-  // ============ 游戏逻辑 ============
   void spawnPlayer_(uint8_t slot_index);
   void handlePlayerJoin_(uint8_t slot_index);
   void handlePlayerDisconnect_(uint8_t slot_index);
@@ -121,13 +112,11 @@ class MinecraftServer {
   void trySpawnMobNearPlayer_(PlayerData* player);
   void broadcastMobSpawn_(uint8_t type, int16_t x, uint8_t y, int16_t z);
 
-  // ============ 辅助 ============
   PacketCodec codecForSlot_(uint8_t slot_index);
   uint16_t onlineCount_() const;
   int slotIndexForPlayer_(PlayerData* player);
   void processDeferredChunks_(uint8_t slot_index);
 
-  // ============ 成员 ============
   NetworkLayer network_;
   ClientSlot clients_[kMaxClients];
   int64_t last_tick_time_us_;
