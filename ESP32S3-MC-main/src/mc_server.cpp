@@ -1151,8 +1151,7 @@ else if (strcmp(msg, "!items") == 0) {
       }
       return true;
     }
-
-case 0x2A: { // Player Command
+    
 case 0x2A: { // Player Command
     if (!player) return codec.skipBytes((size_t)packet_len);
     int32_t eid; codec.readVarInt(eid);
