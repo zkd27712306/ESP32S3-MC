@@ -1,7 +1,7 @@
 /**
  * ESP32MC - Minecraft Java Server on ESP32
  * 协议版本 26.1.2 / 775
- * 纯 AP 热点模式，不连接外部 WiFi
+ * WiFi STA 模式，连接外部 WiFi 热点
  * 每次启动生成不同世界
  */
 
@@ -14,6 +14,12 @@
 static const uint16_t MC_PORT = 25565;
 static MinecraftServer server(MC_PORT);
 static bool server_started = false;
+
+// ============================================================
+// WiFi 配置（请修改为你的路由器信息）
+// ============================================================
+static const char* WIFI_SSID     = "zzhengkaidong";
+static const char* WIFI_PASSWORD = "zzkd27712306zkd";
 
 static const char *resetReasonString(esp_reset_reason_t reason) {
     switch (reason) {
@@ -38,7 +44,7 @@ void setup() {
 
     esp_reset_reason_t reset_reason = esp_reset_reason();
     Serial.println("\n========================================");
-    Serial.println("  ESP32-MC Server (AP Mode)");
+    Serial.println("  ESP32-MC Server (STA Mode)");
     Serial.println("  Protocol: 26.1.2 / 775");
     Serial.println("========================================");
     Serial.printf("Reset reason: %d (%s)\n", (int)reset_reason, resetReasonString(reset_reason));
@@ -52,37 +58,26 @@ void setup() {
     if (seed == 0) seed = 0xDEADBEEF;
     world_seed = seed;
     rng_seed = seed ^ 0x350B10FB;
-    
+
     Serial.printf("World Seed: 0x%08X\n", world_seed);
     Serial.printf("RNG Seed: 0x%08X\n", rng_seed);
 
-    // ====== 启动 AP 热点（纯热点模式） ======
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP("ESP32-MC", "ESP32-MC");
-    
-    IPAddress ip = WiFi.softAPIP();
-    Serial.print("AP started, IP: ");
-    Serial.println(ip);
-    Serial.print("MAC Address: ");
-    Serial.println(WiFi.softAPmacAddress());
-
-    // ====== 启动服务器（传空字符串表示 AP 模式） ======
-    if (!server.begin("", "")) {
+    // ====== 启动服务器（先启动，再连接 WiFi） ======
+    if (!server.begin(WIFI_SSID, WIFI_PASSWORD)) {
         Serial.println("[ERROR] Server failed to start!");
     } else {
-        Serial.println("[OK] Server started successfully!");
-        Serial.print("[OK] Listening on port ");
-        Serial.println(MC_PORT);
-        Serial.print("[OK] Connect with Minecraft Java 26.1.2 at ");
-        Serial.print(ip);
-        Serial.println(":25565");
+        Serial.println("[OK] Server initialized!");
         server_started = true;
     }
-    
+
+    // ====== 打印连接提示 ======
     Serial.println("========================================");
-    Serial.println("  Connect to WiFi: ESP32-MC");
-    Serial.println("  Password: ESP32-MC");
-    Serial.println("  Server IP: 192.168.4.1:25565");
+    Serial.print("  Connect with Minecraft Java 26.1.2 to the ESP32 IP");
+    Serial.println();
+    Serial.print("  SSID: ");
+    Serial.println(WIFI_SSID);
+    Serial.print("  Port: ");
+    Serial.println(MC_PORT);
     Serial.println("========================================");
 }
 
