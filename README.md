@@ -73,6 +73,8 @@
 
 ### 方式一：云编译（推荐，无需本地环境）
 
+你可以先fork本项目，以便更好编译。
+
 本项目支持 [GitHub Actions](https://github.com/zkd27712306/ESP32S3-MC/actions) 云端编译，无需本地安装 PlatformIO。
 
 1. 打开仓库的 [Actions 页面](https://github.com/zkd27712306/ESP32S3-MC/actions)
@@ -127,10 +129,9 @@
 | `boot_app0.bin` | `0xe000` |
 | `firmware.bin` | `0x10000` |
 
-5. 波特率建议选择 `921600`（更快），如果失败改成 `115200`
-6. 点击 **Program** 开始烧录
-7. 等待进度条走完，显示 **Done** 即烧录成功
-8. 按一下 ESP32-S3 板上的 **RST / EN** 键，或重新上电
+5. 点击 **Program** 开始烧录
+6. 等待进度条走完，显示 **Done** 即烧录成功
+7. 按一下 ESP32-S3 板上的 **RST / EN** 键，或重新上电
 
 > 💡 **如果 [ESPWebTool](https://esptool.spacehuhn.com/) 连不上开发板，检查**：
 > - 浏览器是否为 Chrome / Edge（Firefox、Safari 不支持 Web Serial）
@@ -164,21 +165,23 @@
 6. 填写要连接的 WiFi 名称和密码
 7. 保存后 ESP32 自动重启，进入 **STA 模式**，连接你配置的 WiFi
 
-> 连接成功后，串口会输出 ESP32 从路由器获取到的 IP，Minecraft 客户端用这个 IP 连接即可。
+> 连接成功后，串口会输出 ESP32 从路由器获取到的 IP，Minecraft 客户端用这个 IP +25565端口连接即可。
 
 ### 后续上电（已配置）
 
 1. ESP32-S3 上电
-2. 自动进入 ** AP 模式**，连接已保存的 WiFi
-3. 服务器监听端口：`25565`
-4. Minecraft Java 客户端连接路由器分配到的 IP
-5.长按 BOOT **2 秒** 进入STA模式
+2. 自动进入 **AP 热点模式**，创建名为 `ESP32-MC` 的 WiFi 热点
+3. 密码：`ESP32-MC`
+4. 服务器监听端口：`25565`
+5. 长按 BOOT **2 秒** 进入STA模式
+6. ESP自动连接已保存的WIFI
+7. 手机和电脑连接WIFI，用 IP +25565端口连接即可
 
 ### BOOT 键操作
 
 | 操作 | 效果 |
 |------|------|
-| 长按 BOOT **2 秒** | **仅在没有配置文件时**，切换到 Setup 配置模式 |
+| 长按 BOOT **2 秒** | **仅在没有配置文件时**，切换到 Setup 配置模式 ，否则在两种模式间切换 |
 | 长按 BOOT **10 秒** | 清空 WiFi 配置，重启后回到默认 AP 模式 |
 
 ### 连接 Minecraft
