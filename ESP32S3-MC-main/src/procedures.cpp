@@ -263,7 +263,7 @@ int givePlayerItem(PlayerData *player, uint16_t item, uint8_t count) {
   uint8_t slot = 255;
   uint8_t stack_size = getItemStackSize(item);
 
-  // ★ 只在 0-35 找堆叠（排除护甲 36-39 和副手 40）
+  // 只在 0-35 找堆叠
   for (int i = 0; i < 36; i++) {
     if (player->inventory_items[i] == item && player->inventory_count[i] <= stack_size - count) {
       slot = i; break;
