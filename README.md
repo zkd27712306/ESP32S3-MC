@@ -1,10 +1,10 @@
 # ESP32MC Server
 
-## English version:[here](https://github.com/zkd27712306/ESP32S3-MC/blob/main/English.md)
-
-> 一块 ESP32-S3，就是一个 Minecraft Java 服务器。
+> 🌐 [English](https://github.com/zkd27712306/ESP32S3-MC/blob/main/English.md)
 
 基于 [ESP32-MC](https://github.com/GYGKHD/ESP32-MC) 优化而来的极简 Minecraft Java 服务器，运行在 **ESP32-S3** 上。修复了大量原有 Bug（如打开容器崩溃、空包发送、熔炉递归等），并新增了部分实用功能（如 `!give` 指令、护甲系统、弓箭系统、生物 AI 等）。
+
+> 一块 ESP32-S3，就是一个 Minecraft Java 服务器。
 
 ---
 
