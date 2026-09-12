@@ -16,76 +16,9 @@ void (*g_packet_activity_cb)() = nullptr;
 namespace {
 const uint8_t SEGMENT_BITS = 0x7F;
 const uint8_t CONTINUE_BIT = 0x80;
-
-// ====== 全局包缓冲 ======
-static uint8_t g_packet_buf[65536];
-static size_t g_packet_buf_len = 0;
-static bool g_packet_open = false;
-}
+}  // namespace
 
 PacketCodec::PacketCodec(int fd) : fd_(fd) {}
-
-// ============================================================
-// 包级封装
-// ============================================================
-
-bool PacketCodec::beginPacket(uint32_t packet_id) {
-    if (g_packet_open) return false;
-    g_packet_buf_len = 0;
-    g_packet_open = true;
-    write_count_ = 0;
-
-    uint32_t v = packet_id;
-    do {
-        uint8_t b = v & 0x7F;
-        v >>= 7;
-        if (v) b |= 0x80;
-        if (g_packet_buf_len >= sizeof(g_packet_buf)) {
-            g_packet_open = false;
-            packet_error_count_++;
-            return false;
-        }
-        g_packet_buf[g_packet_buf_len++] = b;
-    } while (v);
-
-    return true;
-}
-
-bool PacketCodec::endPacket() {
-    if (!g_packet_open) return false;
-    g_packet_open = false;
-
-    uint32_t length = (uint32_t)g_packet_buf_len;
-    if (length == 0) {
-        packet_error_count_++;
-        return false;
-    }
-
-    uint8_t len_bytes[5];
-    size_t len_len = 0;
-    uint32_t v = length;
-    do {
-        uint8_t b = v & 0x7F;
-        v >>= 7;
-        if (v) b |= 0x80;
-        len_bytes[len_len++] = b;
-    } while (v);
-
-    if (!writeExact(len_bytes, len_len)) return false;
-    if (!writeExact(g_packet_buf, g_packet_buf_len)) return false;
-
-    g_packet_buf_len = 0;
-    return true;
-}
-
-void PacketCodec::abortPacket() {
-    g_packet_open = false;
-    g_packet_buf_len = 0;
-}
-
-// ============================================================
-// 底层读写
-// ============================================================
 
 bool PacketCodec::readExact(uint8_t* buf, size_t len) {
   size_t done = 0;
@@ -94,7 +27,7 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
     if (fd_ < 0) return false;
 #ifdef _WIN32
     int n = recv((SOCKET)fd_, (char*)(buf + done), (int)(len - done), 0);
-    if (n > 0) { done += (size_t)n; read_count_ += (size_t)n; start = millis(); continue; }
+    if (n > 0) { done += (size_t)n; start = millis(); continue; }
     if (n == 0) return false;
     int err = WSAGetLastError();
     if (err == WSAEWOULDBLOCK || err == WSAEINTR) {
@@ -106,7 +39,6 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
     int n = recv(fd_, buf + done, len - done, 0);
     if (n > 0) {
       done += (size_t)n;
-      read_count_ += (size_t)n;
       start = millis();
       if (g_packet_activity_cb) g_packet_activity_cb();
       continue;
@@ -124,26 +56,10 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
 }
 
 bool PacketCodec::writeExact(const uint8_t* buf, size_t len) {
-    if (len == 0) return true;
-    if (buf == nullptr) {
-        packet_error_count_++;
-        write_timed_out_ = true;
-        return false;
-    }
-
-    // ====== 包内：写 buffer ======
-    if (g_packet_open) {
-        if (g_packet_buf_len + len > sizeof(g_packet_buf)) {
-            packet_error_count_++;
-            return false;
-        }
-        memcpy(g_packet_buf + g_packet_buf_len, buf, len);
-        g_packet_buf_len += len;
-        write_count_ += len;
+    if (len == 0) {
         return true;
     }
-
-    // ====== 包外：直接写 socket ======
+    
     write_timed_out_ = false;
     write_count_ += len;
     size_t done = 0;
@@ -257,18 +173,9 @@ bool PacketCodec::writeVarInt(uint32_t value) {
         if (value) byte |= 0x80;
         out[len++] = byte;
     } while (value);
-
+    
     if (len == 0) return true;
     return writeExact(out, len);
-}
-
-bool PacketCodec::writePacketLength(uint32_t value) {
-    if (value == 0) {
-        packet_error_count_++;
-        write_timed_out_ = true;
-        return false;
-    }
-    return writeVarInt(value);
 }
 
 int PacketCodec::sizeVarInt(uint32_t value) const {

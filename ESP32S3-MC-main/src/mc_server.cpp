@@ -47,7 +47,6 @@ MinecraftServer::MinecraftServer(uint16_t port) : network_(port), last_tick_time
     clients_[i].chunk_interval_ms = 80;
     clients_[i].chunk_send_start_ms = 0;
     clients_[i].chunk_slow_count = 0;
-    clients_[i].packet_err_count = 0;
   }
 }
 
@@ -70,8 +69,7 @@ bool MinecraftServer::begin(const char* ssid, const char* password) {
     uint16_t client_slot = (uint16_t)serverSlotToClientSlot(0, (uint8_t)slot);
     uint32_t pkt_len = 1 + pc.sizeVarInt(0) + 1 + 2 + pc.sizeVarInt(count) +
                        (count > 0 ? pc.sizeVarInt(item) + 2 : 0);
-    if (!pc.writePacketLength(pkt_len)) return;
-    pc.writeByte(0x14);
+    pc.writeVarInt(pkt_len); pc.writeByte(0x14);
     pc.writeVarInt(0); pc.writeVarInt(0); pc.writeUint16(client_slot);
     pc.writeVarInt(count);
     if (count > 0) { pc.writeVarInt(item); pc.writeVarInt(0); pc.writeVarInt(0); }
@@ -109,23 +107,6 @@ void MinecraftServer::poll() {
         if (!clients_[i].used) continue;
         serviceClient_(i);
     }
-
-    // ====== 每 5 秒打印一次包错误统计 ======
-#ifndef _WIN32
-    static uint32_t last_pkt_err_print_ms = 0;
-    uint32_t now_ms_err = millis();
-    if (now_ms_err - last_pkt_err_print_ms > 5000) {
-        last_pkt_err_print_ms = now_ms_err;
-        uint32_t total_err = 0;
-        for (uint8_t i = 0; i < kMaxClients; ++i) {
-            if (!clients_[i].used) continue;
-            total_err += clients_[i].packet_err_count;
-        }
-        if (total_err > 0) {
-            Serial.printf("[PKT_STAT] total packet errors: %u\n", (unsigned)total_err);
-        }
-    }
-#endif
 
   // ============================================================
   // 自适应区块发送调度
@@ -286,7 +267,6 @@ bool MinecraftServer::acceptClient_() {
     clients_[i].chunk_interval_ms = 80;
     clients_[i].chunk_send_start_ms = 0;
     clients_[i].chunk_slow_count = 0;
-    clients_[i].packet_err_count = 0;
     memset(clients_[i].uuid, 0, 16);
     memset(clients_[i].name, 0, 16);
     g_slot_fd_map[i] = new_fd;
@@ -326,37 +306,23 @@ void MinecraftServer::serviceClient_(uint8_t slot_index) {
     return;
   }
 
-  // ====== 只丢弃两个连续 0x00（明显非法） ======
-  if (peek_buf[0] == 0 && peek_buf[1] == 0) {
+  // ====== 检查 peek 到的数据是否看起来有效 ======
+  if ((peek_buf[0] == 0 && peek_buf[1] == 0) || peek_buf[0] > 0x7F) {
     uint8_t dummy[256];
     while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
     return;
   }
 
   PacketCodec codec(slot.fd);
-  codec.resetReadCount();
-
-  // ====== 读包长 ======
-  int32_t packet_len = 0;
-  if (!codec.readVarInt(packet_len)) {
+  int32_t packet_len = 0, packet_id = 0;
+  if (!codec.readVarInt(packet_len) || !codec.readVarInt(packet_id)) {
     uint8_t dummy[256];
     while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
     return;
   }
 
-  // ====== 包长非法：不断开，丢弃后继续 ======
+  // ====== 检查包长度 ======
   if (packet_len <= 0 || packet_len > 65536) {
-    slot.packet_err_count++;
-    Serial.printf("[PKT_ERR] slot=%u bad packet_len=%d, draining\n",
-                  (unsigned)slot_index, (int)packet_len);
-    uint8_t dummy[256];
-    while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
-    return;
-  }
-
-  // ====== 读包 ID ======
-  int32_t packet_id = 0;
-  if (!codec.readVarInt(packet_id)) {
     uint8_t dummy[256];
     while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
     return;
@@ -364,21 +330,19 @@ void MinecraftServer::serviceClient_(uint8_t slot_index) {
 
   int32_t payload_len = packet_len - codec.sizeVarInt((uint32_t)packet_id);
   if (payload_len < 0 || payload_len > 65536) {
-    slot.packet_err_count++;
-    Serial.printf("[PKT_ERR] slot=%u payload_len=%d pkt_len=%d id=%d\n",
-                  (unsigned)slot_index, (int)payload_len, (int)packet_len, (int)packet_id);
     uint8_t dummy[256];
     while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
     return;
   }
 
-  // ====== 特殊包跳过 ======
-  if (packet_id == 0x1D) {
-    if (payload_len > 0) codec.skipBytes((size_t)payload_len);
-    return;
-  }
 
-  // ====== 处理包 ======
+if (packet_id == 0x1D) {
+        if (payload_len > 0) {
+            codec.skipBytes((size_t)payload_len);
+        }
+        return;
+    }
+
   bool ok = false;
   switch (slot.state) {
     case STATE_NONE: ok = handleHandshake_(slot, codec, packet_id); break;
@@ -389,17 +353,11 @@ void MinecraftServer::serviceClient_(uint8_t slot_index) {
     default: ok = false; break;
   }
 
-  // ====== 兜底：保证 payload 读完（不断开） ======
-  size_t consumed = codec.readCount()
-                  - codec.sizeVarInt((uint32_t)packet_len)
-                  - codec.sizeVarInt((uint32_t)packet_id);
-  if (consumed < (size_t)payload_len) {
-    size_t remaining = (size_t)payload_len - consumed;
-    codec.skipBytes(remaining);
-  }
-
   if (!ok) {
-    slot.packet_err_count++;
+    if (!codec.skipBytes((size_t)payload_len)) {
+      uint8_t dummy[256];
+      while (recv(slot.fd, (char*)dummy, sizeof(dummy), MSG_DONTWAIT) > 0) {}
+    }
   }
 }
 
@@ -478,8 +436,7 @@ bool MinecraftServer::sendStatusResponse_(PacketCodec& codec) {
     VERSION_NAME, PROTOCOL_VERSION, MAX_PLAYERS, onlineCount_());
   uint32_t json_len = (uint32_t)len;
   uint32_t pkt_len = 1 + codec.sizeVarInt(json_len) + json_len;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeVarInt(0x00) &&
+  return codec.writeVarInt(pkt_len) && codec.writeVarInt(0x00) &&
          codec.writeVarInt(json_len) && codec.writeExact((const uint8_t*)json, json_len);
 }
 
@@ -509,8 +466,7 @@ bool MinecraftServer::handleLogin_(ClientSlot& slot, PacketCodec& codec, int32_t
 bool MinecraftServer::sendLoginSuccess_(PacketCodec& codec, const uint8_t uuid[16], const char* name) {
   uint32_t name_len = (uint32_t)strlen(name);
   uint32_t pkt_len = 1 + 16 + codec.sizeVarInt(name_len) + name_len + 1;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeVarInt(0x02) &&
+  return codec.writeVarInt(pkt_len) && codec.writeVarInt(0x02) &&
          codec.writeExact(uuid, 16) && codec.writeVarInt(name_len) &&
          codec.writeExact((const uint8_t*)name, name_len) && codec.writeVarInt(0);
 }
@@ -615,13 +571,6 @@ if (on_ground && packet_id != 0x20) {
         return true;
       }
 
-      // 边界检查
-      if (x < -30000000 || x > 30000000 ||
-          z < -30000000 || z > 30000000 ||
-          y < -64 || y > 320) {
-          return true;
-      }
-
       // 更新坐标
       int16_t cx = (int16_t)x, cy = (int16_t)y, cz = (int16_t)z;
       if (!isPassableBlock(getBlockAt(cx, cy, cz)) || !isPassableBlock(getBlockAt(cx, cy + 1, cz))) {
@@ -707,12 +656,6 @@ if (on_ground && packet_id != 0x20) {
       int32_t bz = (int32_t)((pos_raw << 26) >> 38);
       uint8_t face; if (!codec.readByte(face)) return false;
       int32_t sequence; if (!codec.readVarInt(sequence)) return false;
-      // 坐标合理性检查
-      if (bx < -30000000 || bx > 30000000 ||
-          bz < -30000000 || bz > 30000000 ||
-          by < -64 || by > 320) {
-          return true;
-      }
       PacketCodec pc(slot.fd);
       sendAcknowledgeBlockChange_(pc, sequence);
       handlePlayerAction_(player, action, (int16_t)bx, (int16_t)by, (int16_t)bz);
@@ -728,12 +671,6 @@ if (on_ground && packet_id != 0x20) {
     uint8_t face; if (!codec.readByte(face)) return false;
     codec.skipBytes(12 + 2);
     int32_t sequence; if (!codec.readVarInt(sequence)) return false;
-    // 坐标合理性检查
-    if (bx < -30000000 || bx > 30000000 ||
-        bz < -30000000 || bz > 30000000 ||
-        by < -64 || by > 320) {
-        return true;
-    }
     PacketCodec pc(slot.fd);
     sendAcknowledgeBlockChange_(pc, sequence);
     
@@ -1160,7 +1097,7 @@ case 0x2A: { // Player Command
     }
 
     default:
-      return codec.skipBytes((size_t)packet_len);
+      return true;
   }
 }
 
@@ -1344,8 +1281,7 @@ void MinecraftServer::handleServerTick_() {
       int16_t air = (int16_t)(300 - air_ticks * 20);
       if (air < 0) air = 0;
       uint32_t air_pkt_len = 1 + pc.sizeVarInt(i) + 1 + 1 + pc.sizeVarInt((uint32_t)air) + 1;
-      if (!pc.writePacketLength(air_pkt_len)) continue;
-      pc.writeByte(0x63);
+      pc.writeVarInt(air_pkt_len); pc.writeByte(0x63);
       pc.writeVarInt(i);
       pc.writeByte(1);
       pc.writeVarInt(1);
@@ -1354,8 +1290,7 @@ void MinecraftServer::handleServerTick_() {
     } else if (air_ticks > 0) {
       player->flagval_16 = player->flagval_16 & 0x00FF;
       uint32_t air_pkt_len = 1 + pc.sizeVarInt(i) + 1 + 1 + pc.sizeVarInt(300) + 1;
-      if (!pc.writePacketLength(air_pkt_len)) continue;
-      pc.writeByte(0x63);
+      pc.writeVarInt(air_pkt_len); pc.writeByte(0x63);
       pc.writeVarInt(i);
       pc.writeByte(1);
       pc.writeVarInt(1);
@@ -1730,7 +1665,7 @@ void MinecraftServer::broadcastPlayerMetadata_(PlayerData* player) {
     PacketCodec oc(clients_[i].fd);
     int eid_size = oc.sizeVarInt((uint32_t)pi);
     uint32_t pkt_len = 1 + eid_size + 1 + 1 + 1 + 1;
-    if (!oc.writePacketLength(pkt_len)) continue;
+    oc.writeVarInt(pkt_len);
     oc.writeVarInt(0x63);
     oc.writeVarInt((uint32_t)pi);
     oc.writeByte(0);
@@ -1745,24 +1680,14 @@ bool MinecraftServer::handleClickContainer_(uint8_t slot_idx, PacketCodec& codec
     PlayerData* player = (slot.player_index >= 0) ? &player_data[slot.player_index] : nullptr;
     if (!player) return codec.skipBytes((size_t)packet_len);
 
-    int32_t window_id;
-    int32_t state_id;
-    uint16_t clicked_slot_raw;
-    uint8_t button;
-    int32_t mode_i;
-    int32_t changes_count;
-    if (!codec.readVarInt(window_id)) return false;
-    if (!codec.readVarInt(state_id)) return false;
-    if (!codec.readUint16(clicked_slot_raw)) return false;
-    if (!codec.readByte(button)) return false;
-    if (!codec.readVarInt(mode_i)) return false;
-    if (!codec.readVarInt(changes_count)) return false;
-    if (changes_count < 0 || changes_count > 64) {
-        Serial.printf("[PKT_ERR] click changes_count=%d\n", (int)changes_count);
-        return false;
-    }
+    int32_t window_id; codec.readVarInt(window_id);
+    int32_t state_id; codec.readVarInt(state_id);
+    uint16_t clicked_slot_raw; codec.readUint16(clicked_slot_raw);
     int16_t clicked_slot = (int16_t)clicked_slot_raw;
+    uint8_t button; codec.readByte(button);
+    int32_t mode_i; codec.readVarInt(mode_i);
     uint8_t mode = (uint8_t)mode_i;
+    int32_t changes_count; codec.readVarInt(changes_count);
 
     PacketCodec pc(slot.fd);
     uint8_t apply_changes = 1;
@@ -1814,8 +1739,7 @@ bool MinecraftServer::handleClickContainer_(uint8_t slot_idx, PacketCodec& codec
 
     // ====== 处理 changes ======
     for (int32_t i = 0; i < changes_count; i++) {
-        uint16_t change_slot;
-        if (!codec.readUint16(change_slot)) return false;
+        uint16_t change_slot; codec.readUint16(change_slot);
         uint8_t s = clientSlotToServerSlot(window_id, (uint8_t)change_slot);
 
         uint16_t *p_item = nullptr;
@@ -1828,31 +1752,17 @@ bool MinecraftServer::handleClickContainer_(uint8_t slot_idx, PacketCodec& codec
             p_count = &player->craft_count[s - 41];
         }
 
-        uint8_t has_item;
-        if (!codec.readByte(has_item)) return false;
+        uint8_t has_item; codec.readByte(has_item);
         if (!has_item) {
             if (p_item && apply_changes) { *p_item = 0; *p_count = 0; }
             continue;
         }
-        int32_t item_id;
-        int32_t item_count;
-        int32_t comp_add;
-        if (!codec.readVarInt(item_id)) return false;
-        if (!codec.readVarInt(item_count)) return false;
-        if (!codec.readVarInt(comp_add)) return false;
-        if (comp_add < 0 || comp_add > 64) return false;
-        for (int32_t c = 0; c < comp_add; c++) {
-            int32_t t;
-            if (!codec.readVarInt(t)) return false;
-            if (!codec.skipBytes(1)) return false;
-        }
-        int32_t comp_rem;
-        if (!codec.readVarInt(comp_rem)) return false;
-        if (comp_rem < 0 || comp_rem > 64) return false;
-        for (int32_t c = 0; c < comp_rem; c++) {
-            int32_t t;
-            if (!codec.readVarInt(t)) return false;
-        }
+        int32_t item_id; codec.readVarInt(item_id);
+        int32_t item_count; codec.readVarInt(item_count);
+        int32_t comp_add; codec.readVarInt(comp_add);
+        for (int32_t c = 0; c < comp_add; c++) { int32_t t; codec.readVarInt(t); codec.skipBytes(1); }
+        int32_t comp_rem; codec.readVarInt(comp_rem);
+        for (int32_t c = 0; c < comp_rem; c++) { int32_t t; codec.readVarInt(t); }
 
         if (item_count > 0 && apply_changes && p_item) {
             *p_item = (uint16_t)item_id;
@@ -1872,32 +1782,18 @@ bool MinecraftServer::handleClickContainer_(uint8_t slot_idx, PacketCodec& codec
     }
 
     // ====== 鼠标物品 ======
-    uint8_t has_cursor;
-    if (!codec.readByte(has_cursor)) return false;
+    uint8_t has_cursor; codec.readByte(has_cursor);
     if (has_cursor) {
-        int32_t cursor_item;
-        int32_t cursor_count;
-        if (!codec.readVarInt(cursor_item)) return false;
-        if (!codec.readVarInt(cursor_count)) return false;
+        int32_t cursor_item; codec.readVarInt(cursor_item);
+        int32_t cursor_count; codec.readVarInt(cursor_count);
         if (apply_changes) {
             player->flagval_16 = (uint16_t)cursor_item;
             player->flagval_8 = (uint8_t)cursor_count;
         }
-        int32_t ca;
-        if (!codec.readVarInt(ca)) return false;
-        if (ca < 0 || ca > 64) return false;
-        for (int32_t c = 0; c < ca; c++) {
-            int32_t t;
-            if (!codec.readVarInt(t)) return false;
-            if (!codec.skipBytes(1)) return false;
-        }
-        int32_t cr;
-        if (!codec.readVarInt(cr)) return false;
-        if (cr < 0 || cr > 64) return false;
-        for (int32_t c = 0; c < cr; c++) {
-            int32_t t;
-            if (!codec.readVarInt(t)) return false;
-        }
+        int32_t ca; codec.readVarInt(ca);
+        for (int32_t c = 0; c < ca; c++) { int32_t t; codec.readVarInt(t); codec.skipBytes(1); }
+        int32_t cr; codec.readVarInt(cr);
+        for (int32_t c = 0; c < cr; c++) { int32_t t; codec.readVarInt(t); }
     } else {
         if (apply_changes) {
             player->flagval_16 = 0;
@@ -2290,8 +2186,7 @@ bool MinecraftServer::sendBrand_(PacketCodec& codec) {
 bool MinecraftServer::sendPluginMessage_(PacketCodec& codec, const char* channel, const uint8_t* data, uint32_t data_len) {
   uint32_t channel_len = (uint32_t)strlen(channel);
   uint32_t pkt_len = 1 + codec.sizeVarInt(channel_len) + channel_len + codec.sizeVarInt(data_len) + data_len;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x01) &&
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x01) &&
          codec.writeString(channel) && codec.writeVarInt(data_len) && codec.writeExact(data, data_len);
 }
 
@@ -2300,8 +2195,7 @@ bool MinecraftServer::sendKnownPacks_(PacketCodec& codec) {
   uint32_t ns_len = (uint32_t)strlen(ns), pack_len = (uint32_t)strlen(pack), ver_len = (uint32_t)strlen(ver);
   uint32_t pkt_len = 1 + codec.sizeVarInt(1) + codec.sizeVarInt(ns_len) + ns_len +
                      codec.sizeVarInt(pack_len) + pack_len + codec.sizeVarInt(ver_len) + ver_len;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeVarInt(0x0E) && codec.writeVarInt(1) &&
+  return codec.writeVarInt(pkt_len) && codec.writeVarInt(0x0E) && codec.writeVarInt(1) &&
          codec.writeString(ns) && codec.writeString(pack) && codec.writeString(ver);
 }
 
@@ -2309,8 +2203,7 @@ bool MinecraftServer::sendEnabledFeatures_(PacketCodec& codec) {
   const char* feature = "minecraft:vanilla";
   uint32_t flen = (uint32_t)strlen(feature);
   uint32_t pkt_len = 1 + codec.sizeVarInt(1) + codec.sizeVarInt(flen) + flen;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeVarInt(0x0C) && codec.writeVarInt(1) &&
+  return codec.writeVarInt(pkt_len) && codec.writeVarInt(0x0C) && codec.writeVarInt(1) &&
          codec.writeVarInt(flen) && codec.writeExact((const uint8_t*)feature, flen);
 }
 
@@ -2376,7 +2269,7 @@ bool MinecraftServer::sendLoginPlay_(PacketCodec& codec, uint32_t entity_id) {
                    + 1 + 1 + 1 + 1 + 1
                    + 1 + codec.sizeVarInt(63) + 1;
   codec.resetWriteCount();
-  bool ok = codec.writePacketLength(pkt_len) && codec.writeVarInt(0x31) &&
+  bool ok = codec.writeVarInt(pkt_len) && codec.writeVarInt(0x31) &&
          codec.writeUint32(entity_id) && codec.writeByte(0) &&
          codec.writeVarInt(1) && codec.writeVarInt(9) && codec.writeExact((const uint8_t*)dim, 9) &&
          codec.writeVarInt(MAX_PLAYERS) && codec.writeVarInt(ACTIVE_VIEW_DISTANCE) &&
@@ -2395,8 +2288,7 @@ bool MinecraftServer::sendLoginPlay_(PacketCodec& codec, uint32_t entity_id) {
 
 bool MinecraftServer::sendSynchronizePlayerPosition_(PacketCodec& codec, double x, double y, double z, float yaw, float pitch) {
   uint32_t pkt_len = 61 + codec.sizeVarInt((uint32_t)-1);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x48) && codec.writeVarInt((uint32_t)-1) &&
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x48) && codec.writeVarInt((uint32_t)-1) &&
          codec.writeDouble(x) && codec.writeDouble(y) && codec.writeDouble(z) &&
          codec.writeDouble(0) && codec.writeDouble(0) && codec.writeDouble(0) &&
          codec.writeFloat(yaw) && codec.writeFloat(pitch) && codec.writeUint32(0);
@@ -2408,22 +2300,18 @@ bool MinecraftServer::sendSetDefaultSpawnPosition_(PacketCodec& codec, int64_t x
   uint64_t packed = (((uint64_t)x & 0x3FFFFFFULL) << 38) | (((uint64_t)z & 0x3FFFFFFULL) << 12) | ((uint64_t)y & 0xFFFULL);
   uint32_t payload = codec.sizeVarInt(dim_len) + dim_len + 8 + 4 + 4;
   uint32_t pkt_len = codec.sizeVarInt(0x61) + payload;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeVarInt(0x61) &&
+  return codec.writeVarInt(pkt_len) && codec.writeVarInt(0x61) &&
          codec.writeVarInt(dim_len) && codec.writeExact((const uint8_t*)dim, dim_len) &&
          codec.writeUint64(packed) && codec.writeFloat(yaw) && codec.writeFloat(pitch);
 }
 
 bool MinecraftServer::sendStartWaitingForChunks_(PacketCodec& codec) {
-  uint32_t pkt_len = 1 + 1;  // packet_id(1) + radius(1)
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeVarInt(0x26) && codec.writeVarInt(13);
+  return codec.writeVarInt(6) && codec.writeByte(0x26) && codec.writeByte(13) && codec.writeUint32(0);
 }
 
 bool MinecraftServer::sendSetCenterChunk_(PacketCodec& codec, int x, int z) {
   uint32_t pkt_len = 1 + codec.sizeVarInt((uint32_t)x) + codec.sizeVarInt((uint32_t)z);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x5E) && codec.writeVarInt((uint32_t)x) && codec.writeVarInt((uint32_t)z);
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x5E) && codec.writeVarInt((uint32_t)x) && codec.writeVarInt((uint32_t)z);
 }
 
 bool MinecraftServer::sendKeepAlive_(PacketCodec& codec) {
@@ -2432,16 +2320,14 @@ bool MinecraftServer::sendKeepAlive_(PacketCodec& codec) {
 
 bool MinecraftServer::sendSetHealth_(PacketCodec& codec, uint8_t health, uint8_t food, uint16_t saturation) {
   uint32_t pkt_len = 9 + codec.sizeVarInt(food);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x68) &&
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x68) &&
          codec.writeFloat((float)health) && codec.writeVarInt(food) &&
          codec.writeFloat((float)(saturation - 200) / 500.0f);
 }
 
 bool MinecraftServer::sendSetHeldItem_(PacketCodec& codec, uint8_t slot) {
   uint32_t pkt_len = codec.sizeVarInt(0x69) + 1;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeVarInt(0x69) && codec.writeByte(slot);
+  return codec.writeVarInt(pkt_len) && codec.writeVarInt(0x69) && codec.writeByte(slot);
 }
 
   //处理负数 window_id
@@ -2462,7 +2348,7 @@ bool MinecraftServer::sendSetContainerSlot_(PacketCodec& codec, int window_id, u
         pkt_len += codec.sizeVarInt(item) + 2;
     }
     
-    if (!codec.writePacketLength(pkt_len)) return false;
+    if (!codec.writeVarInt(pkt_len)) return false;
     if (!codec.writeByte(0x14)) return false;
     if (!codec.writeVarInt(w_id)) return false;
     if (!codec.writeVarInt(0)) return false;
@@ -2478,16 +2364,14 @@ bool MinecraftServer::sendSetContainerSlot_(PacketCodec& codec, int window_id, u
 
 bool MinecraftServer::sendBlockUpdate_(PacketCodec& codec, int64_t x, int64_t y, int64_t z, uint8_t block) {
   uint32_t pkt_len = 9 + codec.sizeVarInt(block_palette[block]);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x08) &&
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x08) &&
          codec.writeUint64(((x & 0x3FFFFFF) << 38) | ((z & 0x3FFFFFF) << 12) | (y & 0xFFF)) &&
          codec.writeVarInt(block_palette[block]);
 }
 
 bool MinecraftServer::sendAcknowledgeBlockChange_(PacketCodec& codec, int sequence) {
   uint32_t pkt_len = 1 + codec.sizeVarInt((uint32_t)sequence);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x04) && codec.writeVarInt((uint32_t)sequence);
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x04) && codec.writeVarInt((uint32_t)sequence);
 }
 
 bool MinecraftServer::sendPlayerInfoUpdateAddPlayer_(PacketCodec& codec, PlayerData& player) {
@@ -2497,7 +2381,7 @@ bool MinecraftServer::sendPlayerInfoUpdateAddPlayer_(PacketCodec& codec, PlayerD
   // 每个玩家的数据: uuid(16) + name(varint+str) + properties(varint=0) + listed(bool=true) + latency(varint=0)
   uint32_t per_player = 16 + codec.sizeVarInt(name_len) + name_len + codec.sizeVarInt(0) + 1 + codec.sizeVarInt(0);
   uint32_t pkt_len = 1 + 1 + codec.sizeVarInt(1) + per_player;
-  if (!codec.writePacketLength(pkt_len)) return false;
+  if (!codec.writeVarInt(pkt_len)) return false;
   if (!codec.writeByte(0x46)) return false;   // packet id
   if (!codec.writeByte(actions)) return false; // action bitmask
   if (!codec.writeVarInt(1)) return false;     // player count
@@ -2515,55 +2399,47 @@ bool MinecraftServer::sendPlayerInfoUpdateAddPlayer_(PacketCodec& codec, PlayerD
 }
 
 bool MinecraftServer::sendSpawnEntity_(PacketCodec& codec, int id, uint8_t* uuid, int type, double x, double y, double z, uint8_t yaw, uint8_t pitch) {
-  uint32_t pkt_len = 51 + codec.sizeVarInt((uint32_t)id) + codec.sizeVarInt((uint32_t)type);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x01) &&
+  uint32_t pkt_len = 45 + codec.sizeVarInt((uint32_t)id) + codec.sizeVarInt((uint32_t)type) + codec.sizeVarInt(0);
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x01) &&
          codec.writeVarInt((uint32_t)id) && codec.writeExact(uuid, 16) && codec.writeVarInt((uint32_t)type) &&
          codec.writeDouble(x) && codec.writeDouble(y) && codec.writeDouble(z) &&
          codec.writeByte(0) && codec.writeByte(pitch) && codec.writeByte(yaw) && codec.writeByte(yaw) &&
-         codec.writeVarInt(0) &&
-         codec.writeUint16(0) && codec.writeUint16(0) && codec.writeUint16(0);
+         codec.writeVarInt(0);
 }
 
 bool MinecraftServer::sendEntityAnimation_(PacketCodec& codec, int id, uint8_t animation) {
   uint32_t pkt_len = 2 + codec.sizeVarInt((uint32_t)id);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x02) && codec.writeVarInt((uint32_t)id) && codec.writeByte(animation);
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x02) && codec.writeVarInt((uint32_t)id) && codec.writeByte(animation);
 }
 
 bool MinecraftServer::sendTeleportEntity_(PacketCodec& codec, int id, double x, double y, double z, float yaw, float pitch) {
-  uint32_t pkt_len = 61 + codec.sizeVarInt((uint32_t)id);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x7D) && codec.writeVarInt((uint32_t)id) &&
+  uint32_t pkt_len = 62 + codec.sizeVarInt((uint32_t)id);
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x7D) && codec.writeVarInt((uint32_t)id) &&
          codec.writeDouble(x) && codec.writeDouble(y) && codec.writeDouble(z) &&
          codec.writeUint64(0) && codec.writeUint64(0) && codec.writeUint64(0) &&
-         codec.writeFloat(yaw) && codec.writeFloat(pitch) && codec.writeUint32(0);
+         codec.writeFloat(yaw) && codec.writeFloat(pitch) && codec.writeByte(1) && codec.writeUint32(0);
 }
 
 bool MinecraftServer::sendSetHeadRotation_(PacketCodec& codec, int id, uint8_t yaw) {
   uint32_t pkt_len = 2 + codec.sizeVarInt((uint32_t)id);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x53) && codec.writeVarInt((uint32_t)id) && codec.writeByte(yaw);
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x53) && codec.writeVarInt((uint32_t)id) && codec.writeByte(yaw);
 }
 
 bool MinecraftServer::sendUpdateEntityRotation_(PacketCodec& codec, int id, uint8_t yaw, uint8_t pitch) {
   uint32_t pkt_len = 4 + codec.sizeVarInt((uint32_t)id);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x38) && codec.writeVarInt((uint32_t)id) &&
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x38) && codec.writeVarInt((uint32_t)id) &&
          codec.writeByte(yaw) && codec.writeByte(pitch) && codec.writeByte(1);
 }
 
 bool MinecraftServer::sendDamageEvent_(PacketCodec& codec, int entity_id, int type) {
   uint32_t pkt_len = 4 + codec.sizeVarInt((uint32_t)entity_id) + codec.sizeVarInt((uint32_t)type);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x19) && codec.writeVarInt((uint32_t)entity_id) &&
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x19) && codec.writeVarInt((uint32_t)entity_id) &&
          codec.writeVarInt((uint32_t)type) && codec.writeByte(0) && codec.writeByte(0) && codec.writeByte(0);
 }
 
 bool MinecraftServer::sendRemoveEntity_(PacketCodec& codec, int entity_id) {
   uint32_t pkt_len = 2 + codec.sizeVarInt((uint32_t)entity_id);
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x4D) && codec.writeByte(1) && codec.writeVarInt((uint32_t)entity_id);
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x4D) && codec.writeByte(1) && codec.writeVarInt((uint32_t)entity_id);
 }
 
 bool MinecraftServer::sendSystemChat_(PacketCodec& codec, const char* message, uint16_t len) {
@@ -2573,8 +2449,7 @@ bool MinecraftServer::sendSystemChat_(PacketCodec& codec, const char* message, u
     }
     
     uint32_t pkt_len = 5 + len;
-    if (!codec.writePacketLength(pkt_len)) return false;
-    return codec.writeByte(0x79) &&
+    return codec.writeVarInt(pkt_len) && codec.writeByte(0x79) &&
            codec.writeByte(8) && codec.writeUint16(len) && 
            codec.writeExact((const uint8_t*)message, len) &&
            codec.writeByte(0);
@@ -2586,8 +2461,7 @@ bool MinecraftServer::sendEntityEvent_(PacketCodec& codec, int entity_id, uint8_
 
 bool MinecraftServer::sendOpenScreen_(PacketCodec& codec, uint8_t window, const char* title, uint16_t length) {
   uint32_t pkt_len = 1 + 2 * codec.sizeVarInt(window) + 1 + 2 + length;
-  if (!codec.writePacketLength(pkt_len)) return false;
-  return codec.writeByte(0x3B) &&
+  return codec.writeVarInt(pkt_len) && codec.writeByte(0x3B) &&
          codec.writeVarInt(window) && codec.writeVarInt(window) &&
          codec.writeByte(8) && codec.writeUint16(length) && codec.writeExact((const uint8_t*)title, length);
 }
@@ -2677,9 +2551,7 @@ bool MinecraftServer::sendChunkDataAndUpdateLight_(PacketCodec& codec, int chunk
 
     // ====== 空区块处理 ======
     if (total_pkt_len <= 0 || total_pkt_len > 2000000) {
-        Serial.printf("[CHUNK_ERR] chunk(%d,%d) total_pkt_len=%u, sending empty\n",
-                      chunk_x, chunk_z, (unsigned)total_pkt_len);
-        codec.writePacketLength(12);
+        codec.writeVarInt(12);
         codec.writeVarInt(0x2D);
         codec.writeUint32((uint32_t)chunk_x);
         codec.writeUint32((uint32_t)chunk_z);
@@ -2690,7 +2562,7 @@ bool MinecraftServer::sendChunkDataAndUpdateLight_(PacketCodec& codec, int chunk
     }
 
     // ====== 正常发送区块 ======
-    if (!codec.writePacketLength(total_pkt_len)) return false;
+    if (!codec.writeVarInt(total_pkt_len)) return false;
     if (!codec.writeVarInt(0x2D)) return false;
     if (!codec.writeUint32((uint32_t)chunk_x)) return false;
     if (!codec.writeUint32((uint32_t)chunk_z)) return false;
@@ -2874,7 +2746,7 @@ void MinecraftServer::processDeferredChunks_(uint8_t slot_index) {
         // 1 attribute: id(varint=22) + base(double=0.1) + modifiers_count(varint=0)
         uint32_t attr_pkt_len = pc.sizeVarInt(0x83) + eid_size + pc.sizeVarInt(1)
                               + pc.sizeVarInt(22) + 8 + pc.sizeVarInt(0);
-        if (!pc.writePacketLength(attr_pkt_len)) return;
+        pc.writeVarInt(attr_pkt_len);
         pc.writeVarInt(0x83);
         pc.writeVarInt((uint32_t)(slot.player_index));
         pc.writeVarInt(1);           // 1 attribute
