@@ -107,7 +107,6 @@ When flashing with [ESPWebTool](https://esptool.spacehuhn.com/) or esptool, plea
 |------|---------------|
 | `bootloader.bin` | `0x0` |
 | `partitions.bin` | `0x8000` |
-| `boot_app0.bin` | `0xe000` |
 | `firmware.bin` | `0x10000` |
 
 ### ESPWebTool Web Flashing
@@ -121,13 +120,12 @@ When flashing with [ESPWebTool](https://esptool.spacehuhn.com/) or esptool, plea
 1. Open [ESPWebTool](https://esptool.spacehuhn.com/) with Chrome or Edge
 2. Click the **Connect** button and select the ESP32-S3's serial port (COMx on Windows)
 3. Enter the address in **Flash Address**, select the corresponding file in **File**
-4. Add the 4 files in order according to the correspondence below:
+4. Add the 3 files in order according to the correspondence below:
 
 | File | Flash Address |
 |------|---------------|
 | `bootloader.bin` | `0x0` |
 | `partitions.bin` | `0x8000` |
-| `boot_app0.bin` | `0xe000` |
 | `firmware.bin` | `0x10000` |
 
 5. Click **Program** to start flashing
