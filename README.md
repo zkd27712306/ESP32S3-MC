@@ -1,4 +1,4 @@
-# ESP32MC Server 🌐 [English](https://github.com/zkd27712306/ESP32S3-MC/blob/main/English.md)
+# ESP32MC Server 🌐 [English](https://github.com/zkd27712306/ESP32S3-MC/blob/main/English.en.md)
 
 > 一块 ESP32-S3，就是一个 Minecraft Java 服务器。
 
