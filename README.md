@@ -107,7 +107,6 @@
 |------|----------|
 | `bootloader.bin` | `0x0` |
 | `partitions.bin` | `0x8000` |
-| `boot_app0.bin` | `0xe000` |
 | `firmware.bin` | `0x10000` |
 
 ### ESPWebTool 网页烧录
@@ -121,13 +120,12 @@
 1. 用 Chrome 或 Edge 打开 [ESPWebTool](https://esptool.spacehuhn.com/)
 2. 点击 **Connect** 按钮，选择 ESP32-S3 的串口（Windows 下是 COMx）
 3. 在 **Flash Address** 处填写地址，**File** 处选择对应文件
-4. 按下面的对应关系依次添加 4 个文件：
+4. 按下面的对应关系依次添加 3 个文件：
 
 | 文件 | 烧录地址 |
 |------|----------|
 | `bootloader.bin` | `0x0` |
 | `partitions.bin` | `0x8000` |
-| `boot_app0.bin` | `0xe000` |
 | `firmware.bin` | `0x10000` |
 
 5. 点击 **Program** 开始烧录
