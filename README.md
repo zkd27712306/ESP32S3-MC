@@ -71,7 +71,11 @@
 
 ## 🚀 快速开始
 
-### 方式一：云编译（推荐，无需本地环境）
+### 方式一：直接下载固件（推荐，无需编译）
+
+从 [ESP32S3-MC Releases](https://github.com/zkd27712306/ESP32S3-MC/releases) 下载可直接烧录的固件，使用烧录工具（如 [ESPWebTool](https://esptool.spacehuhn.com/)）烧录即可。
+
+### 方式二：云编译（无需本地环境）
 
 你可以先 fork 本项目，以便更好编译。
 
@@ -84,16 +88,12 @@
 
 > ⚠️ Artifact 有效期 30 天，请及时下载。
 
-### 方式二：本地编译
+### 方式三：本地编译
 
 1. 用 Visual Studio Code 打开 `ESP32S3-MC-main/src/` 目录
 2. 安装 PlatformIO，本项目默认使用 `4d_systems_esp32s3_gen4_r8n16`（ESP32-S3 + 8MB PSRAM）
 3. **请使用仓库自带的 `platformio.ini`，不要随意更换板型** —— 无 PSRAM 的板子可能内存不足，无法稳定运行
 4. 编译并烧录
-
-### 方式三：直接下载固件
-
-从 [ESP32S3-MC Releases](https://github.com/zkd27712306/ESP32S3-MC/releases) 下载固件，使用烧录工具（如 [ESPWebTool](https://esptool.spacehuhn.com/)）直接烧录。
 
 ---
 
