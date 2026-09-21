@@ -92,8 +92,7 @@
 
 1. 用 Visual Studio Code 打开 `ESP32S3-MC-main/src/` 目录
 2. 安装 PlatformIO，本项目默认使用 `4d_systems_esp32s3_gen4_r8n16`（ESP32-S3 + 8MB PSRAM）
-3. **请使用仓库自带的 `platformio.ini`，不要随意更换板型** —— 无 PSRAM 的板子可能内存不足，无法稳定运行
-4. 编译并烧录
+3. 编译并烧录
 
 ---
 
@@ -223,7 +222,6 @@
 
 ## ⚠️ 已知限制
 
-- 需要 **带 PSRAM 的 ESP32-S3**（推荐 8MB），无 PSRAM 的板子可能内存不足，无法稳定运行
 - 视距固定为 2，最大 5 人
 - 无红石、无村庄、无下界、无末地
 - 弓箭无抛物线、无视线检测
