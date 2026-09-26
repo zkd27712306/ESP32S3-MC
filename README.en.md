@@ -92,8 +92,7 @@ This project supports [GitHub Actions](https://github.com/zkd27712306/ESP32S3-MC
 
 1. Open the `ESP32S3-MC-main/src/` directory with Visual Studio Code
 2. Install PlatformIO; this project uses `4d_systems_esp32s3_gen4_r8n16` by default (ESP32-S3 + 8MB PSRAM)
-3. **Please use the repository's included `platformio.ini`, do not arbitrarily change the board type** — boards without PSRAM may have insufficient memory and cannot run stably
-4. Compile and flash
+3. Compile and flash
 
 ---
 
@@ -223,7 +222,6 @@ These values and most switches are defined in [`ESP32S3-MC-main/src/game_types.h
 
 ## ⚠️ Known Limitations
 
-- Requires **ESP32-S3 with PSRAM** (8MB recommended); boards without PSRAM may have insufficient memory and cannot run stably
 - View distance fixed at 2, max 5 players
 - No redstone, no villages, no Nether, no End
 - Bows have no parabola, no line-of-sight detection
