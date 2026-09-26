@@ -812,21 +812,71 @@ else if (strcmp(msg, "!items") == 0) {
     
     // ====== !overworld ======
     else if (strncmp(msg, "!overworld", 10) == 0) {
-      // 获取出生点的实际地形高度
-      uint8_t ground_y = getHeightAt(8, 8);
-      if (ground_y < 5) ground_y = 80;
-      
-      player->x = 8;
-      player->y = ground_y + 2;
-      player->z = 8;
-      player->grounded_y = ground_y + 1;
-      
-      PacketCodec pc2(slot.fd);
-      sendSynchronizePlayerPosition_(pc2, 8.5, (double)(ground_y + 1.5), 8.5, 0, 0);
-      sendSetDefaultSpawnPosition_(pc2, 8, ground_y + 2, 8, 0, 0);
-      sendSystemChat_(pc2, "Welcome back to Overworld!", strlen("Welcome back to Overworld!"));
-      return true;
+    const int16_t SPAWN_X = 8;
+    const int16_t SPAWN_Z = 8;
+    int16_t spawn_cx = div_floor(SPAWN_X, 16);
+    int16_t spawn_cz = div_floor(SPAWN_Z, 16);
+
+    // 1. 从高往低找实际地面（非空气、非可穿过方块）
+    uint8_t ground_y = 0;
+    for (int y = 100; y > 0; y--) {
+        uint8_t block = getBlockAt(SPAWN_X, y, SPAWN_Z);
+        if (block != B_air && !isPassableBlock(block)) {
+            ground_y = y + 1;
+            break;
+        }
     }
+
+    // 2. 如果出生点被挖空，换一个安全位置
+    if (ground_y <= 1) {
+        for (int r = 1; r <= 16 && ground_y <= 1; r++) {
+            for (int dx = -r; dx <= r && ground_y <= 1; dx++) {
+                for (int dz = -r; dz <= r && ground_y <= 1; dz++) {
+                    int16_t x = SPAWN_X + dx;
+                    int16_t z = SPAWN_Z + dz;
+                    for (int y = 100; y > 0; y--) {
+                        uint8_t block = getBlockAt(x, y, z);
+                        if (block != B_air && !isPassableBlock(block)) {
+                            ground_y = y + 1;
+                            // 更新出生点坐标
+                            player->x = x;
+                            player->z = z;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (ground_y <= 1) {
+        sendSystemChat_(pc, "Spawn area destroyed, cannot teleport", 42);
+        return true;
+    }
+
+    // 3. 更新玩家位置
+    player->x = SPAWN_X;
+    player->z = SPAWN_Z;
+    player->y = ground_y;
+    player->grounded_y = ground_y - 1;
+
+    // 4. 强制发送出生点区块
+    PacketCodec pc2(slot.fd);
+    sendSetCenterChunk_(pc2, spawn_cx, spawn_cz);
+    sendChunkDataAndUpdateLight_(pc2, spawn_cx, spawn_cz);
+
+    // 5. 重置区块队列，让客户端重新加载周围区块
+    slot.chunk_queue_idx = 0;
+    slot.chunk_center_x = spawn_cx;
+    slot.chunk_center_z = spawn_cz;
+    slot.chunk_next_send_ms = millis() + slot.chunk_interval_ms;
+
+    // 6. 同步位置
+    sendSynchronizePlayerPosition_(pc2, SPAWN_X + 0.5, (double)ground_y, SPAWN_Z + 0.5, 0, 0);
+    sendSetDefaultSpawnPosition_(pc2, SPAWN_X, ground_y, SPAWN_Z, 0, 0);
+    sendSystemChat_(pc2, "Welcome back to Overworld!", strlen("Welcome back to Overworld!"));
+    return true;
+}
     
     // ====== !msg ======
     else if (strncmp(msg, "!msg ", 5) == 0) {
