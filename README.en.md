@@ -1,6 +1,6 @@
 # ESP32MC Server 🌐 [中文](https://github.com/zkd27712306/ESP32S3-MC/blob/main/README.md)
 
-> One ESP32-S3 is a Minecraft Java server.
+> One ESP32-S3 is a Minecraft Java server.**need PSRAM**
 
 A minimalist Minecraft Java server optimized from [ESP32-MC](https://github.com/GYGKHD/ESP32-MC), running on the **ESP32-S3**. It fixes a large number of original bugs (such as container-opening crashes, empty packet sending, furnace recursion, etc.) and adds several practical features (such as the `!give` command, armor system, bow system, mob AI, etc.).
 
