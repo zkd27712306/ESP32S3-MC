@@ -45,16 +45,16 @@ jobs:
       - name: List build output
         working-directory: ./ESP32S3-MC-main
         run: |
-          ls -lh .pio/build/esp32-s3-devkitc-1/
+          ls -lh .pio/build/4d_systems_esp32s3_gen4_r8n16/
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: esp32s3-firmware
           path: |
-            ESP32S3-MC-main/.pio/build/esp32-s3-devkitc-1/firmware.bin
-            ESP32S3-MC-main/.pio/build/esp32-s3-devkitc-1/bootloader.bin
-            ESP32S3-MC-main/.pio/build/esp32-s3-devkitc-1/partitions.bin
+            ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/firmware.bin
+            ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16bootloader.bin
+            ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/partitions.bin
           retention-days: 30
 
       - name: Delete old workflow runs
