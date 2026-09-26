@@ -2898,7 +2898,8 @@ void MinecraftServer::processDeferredChunks_(uint8_t slot_index) {
   int oz = (raw % side) - ACTIVE_VIEW_DISTANCE;
 
   PacketCodec pc(slot.fd);
-  sendChunkDataAndUpdateLight_(pc, slot.chunk_center_x + ox, slot.chunk_center_z + oz);
-
-  slot.chunk_queue_idx++;
+if (!sendChunkDataAndUpdateLight_(pc, slot.chunk_center_x + ox, slot.chunk_center_z + oz)) {
+    return;
 }
+
+slot.chunk_queue_idx++;
