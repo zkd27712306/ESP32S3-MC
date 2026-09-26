@@ -91,7 +91,7 @@
 ### 方式三：本地编译
 
 1. 用 Visual Studio Code 打开 `ESP32S3-MC-main/src/` 目录
-2. 安装 PlatformIO，本项目默认使用 `4d_systems_esp32s3_gen4_r8n16`（ESP32-S3 + 8MB PSRAM）
+2. 安装 PlatformIO，本项目默认使用 `esp32-s3-devkitc-1`
 3. 编译并烧录
 
 ---
