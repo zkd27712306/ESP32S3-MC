@@ -1,6 +1,6 @@
 # ESP32MC Server 🌐 [English](https://github.com/zkd27712306/ESP32S3-MC/blob/main/README.en.md)
 
-> 一块 ESP32-S3，就是一个 Minecraft Java 服务器。**需要PSRAM**
+> 一块 ESP32-S3，就是一个 Minecraft Java 服务器。
 
 基于 [ESP32-MC](https://github.com/GYGKHD/ESP32-MC) 优化而来的极简 Minecraft Java 服务器，运行在 **ESP32-S3** 上。修复了大量原有 Bug（如打开容器崩溃、空包发送、熔炉递归等），并新增了部分实用功能（如 `!give` 指令、护甲系统、弓箭系统、生物 AI 等）。
 
@@ -71,6 +71,8 @@
 
 ## 🚀 快速开始
 
+**双人联机跑图时，内部 SRAM 紧张可能导致连接重置，建议开启 PSRAM 并降低视距**
+
 ### 方式一：直接下载固件（推荐，无需编译）
 
 从 [ESP32S3-MC Releases](https://github.com/zkd27712306/ESP32S3-MC/releases) 下载可直接烧录的固件，使用烧录工具（如 [ESPWebTool](https://esptool.spacehuhn.com/)）烧录即可。
@@ -91,7 +93,7 @@
 ### 方式三：本地编译
 
 1. 用 Visual Studio Code 打开 `ESP32S3-MC-main/src/` 目录
-2. 安装 PlatformIO，本项目默认使用 `esp32-s3-devkitc-1`
+2. 安装 PlatformIO，本项目默认使用 `4d_systems_esp32s3_gen4_r8n16`
 3. 编译并烧录
 
 ---
@@ -227,6 +229,7 @@
 - 弓箭无抛物线、无视线检测
 - 熔炉只支持部分配方
 - 本固件已关闭任务看门狗（Task WDT），死机后不会自动重启，需手动按 RST
+- 双人联机跑图时，内部 SRAM 紧张可能导致连接重置，建议开启 PSRAM 并降低视距
 
 ---
 
