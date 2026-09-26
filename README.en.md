@@ -91,7 +91,7 @@ This project supports [GitHub Actions](https://github.com/zkd27712306/ESP32S3-MC
 ### Method 3: Local Build
 
 1. Open the `ESP32S3-MC-main/src/` directory with Visual Studio Code
-2. Install PlatformIO; this project uses `4d_systems_esp32s3_gen4_r8n16` by default (ESP32-S3 + 8MB PSRAM)
+2. Install PlatformIO; this project uses `esp32-s3-devkitc-1` by default
 3. Compile and flash
 
 ---
