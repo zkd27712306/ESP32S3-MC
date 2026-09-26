@@ -2902,4 +2902,5 @@ if (!sendChunkDataAndUpdateLight_(pc, slot.chunk_center_x + ox, slot.chunk_cente
     return;
 }
 
-slot.chunk_queue_idx++;
+  slot.chunk_queue_idx++;
+}
