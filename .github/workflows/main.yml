@@ -53,8 +53,6 @@ jobs:
           name: esp32s3-firmware
           path: |
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/firmware.bin
-            ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/firmware.elf
-            ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/firmware.map
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/bootloader.bin
             ESP32S3-MC-main/.pio/build/4d_systems_esp32s3_gen4_r8n16/partitions.bin
           retention-days: 30
