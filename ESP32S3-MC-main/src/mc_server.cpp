@@ -9,27 +9,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef _WIN32
-#include "win_platform.h"
-#include "win_network_layer.h"
-#else
 #include <errno.h>
 #include <fcntl.h>
 #include <lwip/sockets.h>
 #include <esp_timer.h>
-#endif
 
 namespace {
 const char* VERSION_NAME = "26.1.2";
 const int PROTOCOL_VERSION = 775;
 const int ACTIVE_VIEW_DISTANCE = VIEW_DISTANCE;
 
-#ifdef _WIN32
-int64_t get_time_us() { return esp_timer_get_time_win(); }
-#else
 int64_t get_time_us() { return (int64_t)esp_timer_get_time(); }
-#endif
 }  // namespace
+
+// 保持 WiFiClient 引用防止析构关闭 fd
+static WiFiClient kept_clients[MAX_PLAYERS];
 
 // ============================================================
 // 构造 / 初始化
@@ -177,15 +171,6 @@ void MinecraftServer::poll() {
     };
 
     // ====== 内存分级保护 ======
-#ifdef _WIN32
-    for (uint8_t attempt = 0; attempt < kMaxClients; attempt++) {
-        uint8_t i = (chunk_send_turn + attempt) % kMaxClients;
-        if (sendOneChunk(i)) {
-            chunk_send_turn = (i + 1) % kMaxClients;
-            break;
-        }
-    }
-#else
     uint32_t free_mem = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
     
     if (free_mem < 50000) {
@@ -225,24 +210,13 @@ void MinecraftServer::poll() {
     } else {
         vTaskDelay(25);
     }
-#endif
 }
 
 // ============================================================
 // 连接管理
 // ============================================================
 
-#ifndef _WIN32
-// 保持 WiFiClient 引用防止析构关闭 fd
-static WiFiClient kept_clients[MAX_PLAYERS];
-#endif
-
 bool MinecraftServer::acceptClient_() {
-#ifdef _WIN32
-  SOCKET new_sock = network_.acceptClient();
-  if (new_sock == INVALID_SOCKET) return false;
-  int new_fd = (int)new_sock;
-#else
   WiFiClient client = network_.accept();
   if (!client) return false;
 
@@ -251,7 +225,6 @@ bool MinecraftServer::acceptClient_() {
 
   int flags = fcntl(new_fd, F_GETFL, 0);
   if (flags >= 0) fcntl(new_fd, F_SETFL, flags | O_NONBLOCK);
-#endif
 
   for (uint8_t i = 0; i < kMaxClients; ++i) {
     if (clients_[i].used) continue;
@@ -271,16 +244,10 @@ bool MinecraftServer::acceptClient_() {
     memset(clients_[i].name, 0, 16);
     g_slot_fd_map[i] = new_fd;
     client_count++;
-#ifndef _WIN32
     kept_clients[i] = client;  // 保持引用, 防止 fd 被关闭
-#endif
     return true;
   }
-#ifdef _WIN32
-  closesocket(new_sock);
-#else
   client.stop();
-#endif
   return false;
 }
 
@@ -367,23 +334,12 @@ void MinecraftServer::closeClient_(uint8_t slot_index, int cause) {
 
     if (slot.player_index >= 0) handlePlayerDisconnect_(slot_index);
 
-#ifndef _WIN32
     if (kept_clients[slot_index]) {
         kept_clients[slot_index].flush();
         kept_clients[slot_index].stop();
         kept_clients[slot_index] = WiFiClient();
     }
     slot.fd = -1;
-#else
-    // ====== 彻底释放 WiFiClient ======
-    if (kept_clients[slot_index]) {
-        kept_clients[slot_index].stop();  // 关闭底层 socket
-        kept_clients[slot_index] = WiFiClient();  // 重置对象
-    }
-    
-    // 确保 fd 也被标记为 -1
-    slot.fd = -1;
-#endif
 
     slot.state = STATE_NONE;
     slot.used = false;

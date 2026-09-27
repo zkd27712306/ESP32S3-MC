@@ -1,5 +1,3 @@
-#ifndef _WIN32
-
 #include "network_layer.h"
 
 NetworkLayer::NetworkLayer(uint16_t port)
@@ -173,5 +171,3 @@ void NetworkLayer::startServer_() {
 
   Serial.println("Server listening on port 25565");
 }
-
-#endif // !_WIN32
