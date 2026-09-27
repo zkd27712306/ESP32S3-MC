@@ -1,13 +1,8 @@
 #ifndef MC_SERVER_H
 #define MC_SERVER_H
 
-#ifdef _WIN32
-#include "win_platform.h"
-#include "win_network_layer.h"
-#else
 #include <WiFi.h>
 #include "network_layer.h"
-#endif
 
 #include "packet_codec.h"
 #include "game_types.h"
