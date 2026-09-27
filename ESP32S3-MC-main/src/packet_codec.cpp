@@ -3,15 +3,11 @@
 
 void (*g_packet_activity_cb)() = nullptr;
 
-#ifdef _WIN32
-#include "win_platform.h"
-#else
 #include <Arduino.h>
 #include <errno.h>
 #include <lwip/sockets.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#endif
 
 namespace {
 const uint8_t SEGMENT_BITS = 0x7F;
@@ -25,17 +21,6 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
   uint32_t start = millis();
   while (done < len) {
     if (fd_ < 0) return false;
-#ifdef _WIN32
-    int n = recv((SOCKET)fd_, (char*)(buf + done), (int)(len - done), 0);
-    if (n > 0) { done += (size_t)n; start = millis(); continue; }
-    if (n == 0) return false;
-    int err = WSAGetLastError();
-    if (err == WSAEWOULDBLOCK || err == WSAEINTR) {
-      if (millis() - start > 5000) return false;
-      Sleep(1);
-      continue;
-    }
-#else
     int n = recv(fd_, buf + done, len - done, 0);
     if (n > 0) {
       done += (size_t)n;
@@ -49,7 +34,6 @@ bool PacketCodec::readExact(uint8_t* buf, size_t len) {
       vTaskDelay(1);
       continue;
     }
-#endif
     return false;
   }
   return true;
@@ -68,17 +52,6 @@ bool PacketCodec::writeExact(const uint8_t* buf, size_t len) {
         if (fd_ < 0) return false;
         size_t chunk = len - done;
         if (chunk > 1460) chunk = 1460;
-#ifdef _WIN32
-        int n = send((SOCKET)fd_, (const char*)(buf + done), (int)chunk, 0);
-        if (n > 0) { done += (size_t)n; start = millis(); continue; }
-        if (n == 0) return false;
-        int err = WSAGetLastError();
-        if (err == WSAEWOULDBLOCK || err == WSAEINTR) {
-            if (millis() - start > write_timeout_ms_) { write_timed_out_ = true; return false; }
-            Sleep(1);
-            continue;
-        }
-#else
         int n = send(fd_, buf + done, chunk, MSG_NOSIGNAL);
         if (n > 0) {
             done += (size_t)n;
@@ -92,7 +65,6 @@ bool PacketCodec::writeExact(const uint8_t* buf, size_t len) {
             vTaskDelay(1);
             continue;
         }
-#endif
         return false;
     }
     return true;
