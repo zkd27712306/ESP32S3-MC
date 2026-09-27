@@ -22,6 +22,9 @@ const int ACTIVE_VIEW_DISTANCE = VIEW_DISTANCE;
 int64_t get_time_us() { return (int64_t)esp_timer_get_time(); }
 }  // namespace
 
+// 保持 WiFiClient 引用防止析构关闭 fd
+static WiFiClient kept_clients[MAX_PLAYERS];
+
 // ============================================================
 // 构造 / 初始化
 // ============================================================
@@ -207,7 +210,6 @@ void MinecraftServer::poll() {
     } else {
         vTaskDelay(25);
     }
-#endif
 }
 
 // ============================================================
@@ -215,6 +217,15 @@ void MinecraftServer::poll() {
 // ============================================================
 
 bool MinecraftServer::acceptClient_() {
+  WiFiClient client = network_.accept();
+  if (!client) return false;
+
+  int new_fd = client.fd();
+  if (new_fd < 0) { client.stop(); return false; }
+
+  int flags = fcntl(new_fd, F_GETFL, 0);
+  if (flags >= 0) fcntl(new_fd, F_SETFL, flags | O_NONBLOCK);
+
   for (uint8_t i = 0; i < kMaxClients; ++i) {
     if (clients_[i].used) continue;
     clients_[i].fd = new_fd;
@@ -323,23 +334,12 @@ void MinecraftServer::closeClient_(uint8_t slot_index, int cause) {
 
     if (slot.player_index >= 0) handlePlayerDisconnect_(slot_index);
 
-#ifndef _WIN32
     if (kept_clients[slot_index]) {
         kept_clients[slot_index].flush();
         kept_clients[slot_index].stop();
         kept_clients[slot_index] = WiFiClient();
     }
     slot.fd = -1;
-#else
-    // ====== 彻底释放 WiFiClient ======
-    if (kept_clients[slot_index]) {
-        kept_clients[slot_index].stop();  // 关闭底层 socket
-        kept_clients[slot_index] = WiFiClient();  // 重置对象
-    }
-    
-    // 确保 fd 也被标记为 -1
-    slot.fd = -1;
-#endif
 
     slot.state = STATE_NONE;
     slot.used = false;
